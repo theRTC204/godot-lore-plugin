@@ -1,0 +1,8 @@
+[configuration]
+
+entry_symbol = "godot_lore_plugin_library_init"
+compatibility_minimum = "4.3"
+
+[libraries]
+
+windows.editor.x86_64 = "res://addons/godot-lore-plugin/bin/godot-lore-plugin.windows.editor.x86_64.dll"
