@@ -38,6 +38,19 @@ set_target_properties(
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/third_party/lore/include"
 )
 
+# Thin C++ wrapper adapting lore-capi's async/event-callback API to the
+# synchronous calls EditorVCSInterface's virtual methods need. Its own
+# library so both the extension and the standalone FFI test binary below can
+# link it without depending on godot-cpp.
+add_library(lore_ffi STATIC
+    src/lore_ffi/lore_c_api.h
+    src/lore_ffi/lore_call.h
+    src/lore_ffi/lore_client.h
+    src/lore_ffi/lore_client.cpp
+)
+target_include_directories(lore_ffi PUBLIC src)
+target_link_libraries(lore_ffi PUBLIC lore)
+
 add_library(godot-lore-plugin SHARED
     src/register_types.cpp
     src/register_types.h
@@ -45,7 +58,20 @@ add_library(godot-lore-plugin SHARED
     src/lore_hello.h
 )
 
-target_link_libraries(godot-lore-plugin PRIVATE godot-cpp lore)
+target_link_libraries(godot-lore-plugin PRIVATE godot-cpp lore_ffi)
+
+option(GODOT_LORE_PLUGIN_BUILD_FFI_TEST "Build the standalone lore_ffi test binary (no Godot involved)" ON)
+if(GODOT_LORE_PLUGIN_BUILD_FFI_TEST)
+    add_executable(lore_ffi_test tests/lore_ffi_test.cpp)
+    target_link_libraries(lore_ffi_test PRIVATE lore_ffi)
+    set_target_properties(lore_ffi_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/bin>")
+    add_custom_command(
+        TARGET lore_ffi_test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/third_party/lore/bin/lore.dll"
+            "${CMAKE_BINARY_DIR}/bin/lore.dll"
+    )
+endif()
 
 get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
 
