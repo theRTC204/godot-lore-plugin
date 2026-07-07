@@ -245,3 +245,37 @@ TypedArray<Dictionary> LoreVCSPlugin::_get_diff(const String &p_identifier, int3
 
 	return result;
 }
+
+void LoreVCSPlugin::_stage_file(const String &p_file_path) {
+	std::vector<std::string> paths{ std::string(p_file_path.utf8().get_data()) };
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::stage(repository_path.utf8().get_data(), paths);
+	if (!result.ok) {
+		popup_error(String("Lore stage failed: ") + String(result.error_message.c_str()));
+	}
+}
+
+void LoreVCSPlugin::_unstage_file(const String &p_file_path) {
+	std::vector<std::string> paths{ std::string(p_file_path.utf8().get_data()) };
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::unstage(repository_path.utf8().get_data(), paths);
+	if (!result.ok) {
+		popup_error(String("Lore unstage failed: ") + String(result.error_message.c_str()));
+	}
+}
+
+void LoreVCSPlugin::_discard_file(const String &p_file_path) {
+	std::vector<std::string> paths{ std::string(p_file_path.utf8().get_data()) };
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::discard(repository_path.utf8().get_data(), paths);
+	if (!result.ok) {
+		popup_error(String("Lore discard failed: ") + String(result.error_message.c_str()));
+	}
+}
+
+void LoreVCSPlugin::_commit(const String &p_msg) {
+	std::string message = p_msg.utf8().get_data();
+	std::string repo_path = repository_path.utf8().get_data();
+
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::commit(repo_path, message);
+	if (!result.ok) {
+		popup_error(String("Lore commit failed: ") + String(result.error_message.c_str()));
+	}
+}

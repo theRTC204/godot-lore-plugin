@@ -8,8 +8,17 @@
 namespace godot {
 
 // GDExtension implementation of Godot's VCS plugin interface for the Lore
-// source control system, mirroring godot-git-plugin's role for Git. This
-// phase's real functionality is read-only: status and working-tree diff.
+// source control system, mirroring godot-git-plugin's role for Git. Real
+// functionality so far: status, working-tree diff, stage/unstage/discard,
+// commit, and branch list/current/checkout/create/remove (archive) plus
+// push/pull against the repository's single configured remote.
+//
+// Targets the Godot 4.3 GDExtension API (see GODOTCPP_API_VERSION in the
+// top-level CMakeLists.txt) to keep compatibility_minimum as low as
+// possible, which is why EditorVCSInterface's amend support isn't wired up:
+// _allow_amends() and _commit's `amend` parameter were both added in Godot
+// 4.7, so the underlying lore_ffi::LoreClient::amend is currently unused
+// GDExtension-side. Revisit if this plugin ever ships a 4.7+-only build.
 //
 // EditorVCSInterface's "_REQUIRED" virtuals (see editor_vcs_interface.h) are
 // actually enforced: the dock's connect flow unconditionally calls
@@ -33,6 +42,10 @@ public:
 	virtual String _get_vcs_name() override;
 	virtual TypedArray<Dictionary> _get_modified_files_data() override;
 	virtual TypedArray<Dictionary> _get_diff(const String &p_identifier, int32_t p_area) override;
+	virtual void _stage_file(const String &p_file_path) override;
+	virtual void _unstage_file(const String &p_file_path) override;
+	virtual void _discard_file(const String &p_file_path) override;
+	virtual void _commit(const String &p_msg) override;
 
 	// Stubs: see class comment above. Not implemented yet.
 	virtual void _set_credentials(const String &p_username, const String &p_password, const String &p_ssh_public_key_path, const String &p_ssh_private_key_path, const String &p_ssh_passphrase) override;

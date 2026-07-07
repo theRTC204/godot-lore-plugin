@@ -2,6 +2,8 @@
 
 #include "lore_c_api.h"
 
+#include <windows.h>
+
 #include <condition_variable>
 #include <functional>
 #include <mutex>
@@ -16,6 +18,55 @@ struct LoreCallResult {
 	std::string error_message;
 
 	bool ok() const { return status == 0; }
+};
+
+// lore-capi resolves any user-supplied path (in a `paths` args field, always
+// meant to be repository-relative) against the process's *current working
+// directory*, not `lore_global_args_t.repository_path` — verified
+// empirically: `lore stage <relative-path>` only works when the calling
+// process's CWD is the repository root; run from anywhere else, the path
+// can't be resolved (LORE_EVENT_PATH_IGNORE fires instead of the operation
+// actually happening) with no error surfaced through LORE_EVENT_COMPLETE's
+// status. A GDExtension running inside the Godot editor has no guarantee its
+// CWD is the project root, so every call temporarily chdirs there for its
+// duration (see LoreCall::invoke).
+//
+// Not thread-safe against concurrent LoreCall::invoke calls from different
+// threads (CWD is process-global) — acceptable for now since Godot only
+// calls into EditorVCSInterface from a single thread at a time.
+class ScopedWorkingDirectory {
+public:
+	explicit ScopedWorkingDirectory(const std::string &p_directory) {
+		DWORD length = GetCurrentDirectoryW(0, nullptr);
+		if (length > 0) {
+			previous_directory.resize(length);
+			GetCurrentDirectoryW(length, previous_directory.data());
+			previous_directory.resize(length - 1); // GetCurrentDirectoryW counts the trailing NUL
+		}
+
+		if (p_directory.empty()) {
+			return;
+		}
+		int wide_length = MultiByteToWideChar(CP_UTF8, 0, p_directory.c_str(), -1, nullptr, 0);
+		if (wide_length <= 0) {
+			return;
+		}
+		std::wstring wide_directory(static_cast<size_t>(wide_length), L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, p_directory.c_str(), -1, wide_directory.data(), wide_length);
+		SetCurrentDirectoryW(wide_directory.c_str());
+	}
+
+	~ScopedWorkingDirectory() {
+		if (!previous_directory.empty()) {
+			SetCurrentDirectoryW(previous_directory.c_str());
+		}
+	}
+
+	ScopedWorkingDirectory(const ScopedWorkingDirectory &) = delete;
+	ScopedWorkingDirectory &operator=(const ScopedWorkingDirectory &) = delete;
+
+private:
+	std::wstring previous_directory;
 };
 
 // Runs a Lore C API operation (e.g. lore_repository_status, lore_file_diff)
@@ -46,6 +97,8 @@ public:
 			const lore_global_args_t &p_globals,
 			const ArgsT &p_args,
 			const EventSink &p_on_event) {
+		ScopedWorkingDirectory scoped_cwd(std::string(p_globals.repository_path.string, p_globals.repository_path.length));
+
 		State state{ p_on_event };
 
 		lore_event_callback_config_t callback{};

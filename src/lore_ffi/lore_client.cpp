@@ -39,6 +39,25 @@ lore_global_args_t make_global_args(const std::string &p_repository_path) {
 	return globals;
 }
 
+std::vector<lore_string_t> to_path_array(const std::vector<std::string> &p_paths) {
+	std::vector<lore_string_t> path_strings;
+	path_strings.reserve(p_paths.size());
+	for (const std::string &path : p_paths) {
+		path_strings.push_back(to_lore_string(path));
+	}
+	return path_strings;
+}
+
+LoreResult to_lore_result(const LoreCallResult &p_call_result) {
+	LoreResult result;
+	result.ok = p_call_result.ok();
+	result.error_message = p_call_result.error_message;
+	return result;
+}
+
+void ignore_events(const lore_event_t &) {
+}
+
 } // namespace
 
 void LoreClient::initialize() {
@@ -64,6 +83,14 @@ LoreResult LoreClient::status(const std::string &p_repository_path, std::vector<
 	// untracked files), not just staged ones. The `lore` CLI's own plain
 	// `status` (no flags) always sets it, so match that here.
 	args.staged = 1;
+	// Without `scan`, status only reports files Lore already knows are
+	// dirty (from a prior `lore dirty`/stage/scan); a file the editor's
+	// FileSystem dock just created or deleted on disk, that Lore has never
+	// been told about, is invisible until something walks the filesystem.
+	// A full scan on every status refresh is the correct-but-slow choice for
+	// now; the fast path (feeding EditorFileSystem's own change signals into
+	// lore_file_dirty instead of rescanning) belongs to a later polish pass.
+	args.scan = 1;
 
 	LoreCallResult call_result = LoreCall::invoke<lore_repository_status_args_t>(
 			&lore_repository_status,
@@ -91,10 +118,7 @@ LoreResult LoreClient::status(const std::string &p_repository_path, std::vector<
 				r_files.push_back(std::move(file));
 			});
 
-	LoreResult result;
-	result.ok = call_result.ok();
-	result.error_message = call_result.error_message;
-	return result;
+	return to_lore_result(call_result);
 }
 
 LoreResult LoreClient::diff(const std::string &p_repository_path, const std::vector<std::string> &p_paths, std::vector<FileDiff> &r_diffs) {
@@ -102,11 +126,7 @@ LoreResult LoreClient::diff(const std::string &p_repository_path, const std::vec
 
 	lore_global_args_t globals = make_global_args(p_repository_path);
 
-	std::vector<lore_string_t> path_strings;
-	path_strings.reserve(p_paths.size());
-	for (const std::string &path : p_paths) {
-		path_strings.push_back(to_lore_string(path));
-	}
+	std::vector<lore_string_t> path_strings = to_path_array(p_paths);
 
 	lore_file_diff_args_t args{};
 	args.paths = lore_string_array_t{ path_strings.data(), path_strings.size() };
@@ -129,10 +149,59 @@ LoreResult LoreClient::diff(const std::string &p_repository_path, const std::vec
 				r_diffs.push_back(std::move(diff_entry));
 			});
 
-	LoreResult result;
-	result.ok = call_result.ok();
-	result.error_message = call_result.error_message;
-	return result;
+	return to_lore_result(call_result);
+}
+
+LoreResult LoreClient::stage(const std::string &p_repository_path, const std::vector<std::string> &p_paths) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	std::vector<lore_string_t> path_strings = to_path_array(p_paths);
+
+	lore_file_stage_args_t args{};
+	args.paths = lore_string_array_t{ path_strings.data(), path_strings.size() };
+
+	return to_lore_result(LoreCall::invoke<lore_file_stage_args_t>(&lore_file_stage, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::unstage(const std::string &p_repository_path, const std::vector<std::string> &p_paths) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	std::vector<lore_string_t> path_strings = to_path_array(p_paths);
+
+	lore_file_unstage_args_t args{};
+	args.paths = lore_string_array_t{ path_strings.data(), path_strings.size() };
+
+	return to_lore_result(LoreCall::invoke<lore_file_unstage_args_t>(&lore_file_unstage, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::discard(const std::string &p_repository_path, const std::vector<std::string> &p_paths) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	std::vector<lore_string_t> path_strings = to_path_array(p_paths);
+
+	lore_file_reset_args_t args{};
+	args.paths = lore_string_array_t{ path_strings.data(), path_strings.size() };
+	args.purge = 1;
+
+	return to_lore_result(LoreCall::invoke<lore_file_reset_args_t>(&lore_file_reset, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::commit(const std::string &p_repository_path, const std::string &p_message) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_revision_commit_args_t args{};
+	args.message = to_lore_string(p_message);
+
+	return to_lore_result(LoreCall::invoke<lore_revision_commit_args_t>(&lore_revision_commit, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::amend(const std::string &p_repository_path, const std::string &p_message) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_revision_amend_args_t args{};
+	args.message = to_lore_string(p_message);
+
+	return to_lore_result(LoreCall::invoke<lore_revision_amend_args_t>(&lore_revision_amend, globals, args, &ignore_events));
 }
 
 } // namespace lore_ffi

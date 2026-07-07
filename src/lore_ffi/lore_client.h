@@ -76,6 +76,29 @@ public:
 	// working tree against the current revision (empty `p_paths` diffs
 	// everything).
 	static LoreResult diff(const std::string &p_repository_path, const std::vector<std::string> &p_paths, std::vector<FileDiff> &r_diffs);
+
+	// Stages `p_paths` for the next commit.
+	static LoreResult stage(const std::string &p_repository_path, const std::vector<std::string> &p_paths);
+
+	// Unstages `p_paths`, moving them back to the working-tree state.
+	static LoreResult unstage(const std::string &p_repository_path, const std::vector<std::string> &p_paths);
+
+	// Discards local changes to `p_paths`, resetting them to the current
+	// revision. Always purges untracked paths too (not just modified
+	// tracked ones): EditorVCSInterface's "discard changes" action is
+	// expected to remove a brand-new, never-committed file entirely, the
+	// same way Git's plugin does, and lore_file_reset only does that when
+	// `purge` is set.
+	static LoreResult discard(const std::string &p_repository_path, const std::vector<std::string> &p_paths);
+
+	// Commits currently staged changes with `p_message`.
+	static LoreResult commit(const std::string &p_repository_path, const std::string &p_message);
+
+	// Rewrites the message of the most recent revision. Note: unlike Git's
+	// `commit --amend`, this only changes the commit message — it does not
+	// fold newly staged changes into the previous revision, because
+	// lore_revision_amend's arguments are message-only.
+	static LoreResult amend(const std::string &p_repository_path, const std::string &p_message);
 };
 
 } // namespace lore_ffi
