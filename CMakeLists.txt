@@ -56,6 +56,8 @@ add_library(godot-lore-plugin SHARED
     src/register_types.h
     src/lore_hello.cpp
     src/lore_hello.h
+    src/lore_vcs_plugin.cpp
+    src/lore_vcs_plugin.h
 )
 
 target_link_libraries(godot-lore-plugin PRIVATE godot-cpp lore_ffi)

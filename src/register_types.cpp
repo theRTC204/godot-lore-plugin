@@ -6,15 +6,20 @@
 #include <godot_cpp/godot.hpp>
 
 #include "lore_hello.h"
+#include "lore_vcs_plugin.h"
 
 using namespace godot;
 
 void initialize_lore_plugin_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
-		return;
+	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		GDREGISTER_CLASS(LoreHello);
 	}
 
-	GDREGISTER_CLASS(LoreHello);
+	// EditorVCSInterface (and any subclass of it) is an editor-only class;
+	// it isn't available yet at the SCENE level.
+	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+		GDREGISTER_CLASS(LoreVCSPlugin);
+	}
 }
 
 void uninitialize_lore_plugin_module(ModuleInitializationLevel p_level) {
