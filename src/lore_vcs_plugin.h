@@ -21,15 +21,16 @@ namespace godot {
 // GDExtension-side. Revisit if this plugin ever ships a 4.7+-only build.
 //
 // EditorVCSInterface's "_REQUIRED" virtuals (see editor_vcs_interface.h) are
-// actually enforced: the dock's connect flow unconditionally calls
-// set_credentials (with the setup dialog's fields, even if left blank) and
-// get_previous_commits/get_branch_list/get_current_branch_name/get_remotes
-// (not only when their panel is opened) as soon as a plugin connects, and an
-// unoverridden _REQUIRED virtual logs
+// actually enforced at call time, not just a doc annotation: an unoverridden
+// _REQUIRED virtual logs
 // "Required virtual method ... must be overridden before calling" every time
-// it's invoked. So those are all overridden here too, as honest no-op/empty
-// stubs, purely to satisfy that contract — their real implementations land
-// with auth, branch/remote support, and commit history in a later phase.
+// it's invoked, including several the dock's connect flow calls
+// unconditionally (set_credentials, get_previous_commits) regardless of
+// which panel is open. The remaining stubs below (auth, commit history,
+// remotes-as-a-concept, fetch) are honest no-ops for operations Lore either
+// doesn't support the way Git does (no multiple named remotes, no
+// fetch-without-integrating) or that need more design/infra than this phase
+// covers (auth, commit history) — not gaps in what's wired up so far.
 class LoreVCSPlugin : public EditorVCSInterface {
 	GDCLASS(LoreVCSPlugin, EditorVCSInterface)
 
@@ -46,13 +47,21 @@ public:
 	virtual void _unstage_file(const String &p_file_path) override;
 	virtual void _discard_file(const String &p_file_path) override;
 	virtual void _commit(const String &p_msg) override;
+	virtual TypedArray<String> _get_branch_list() override;
+	virtual String _get_current_branch_name() override;
+	virtual bool _checkout_branch(const String &p_branch_name) override;
+	virtual void _create_branch(const String &p_branch_name) override;
+	virtual void _remove_branch(const String &p_branch_name) override;
+	virtual TypedArray<String> _get_remotes() override;
+	virtual void _push(const String &p_remote, bool p_force) override;
+	virtual void _pull(const String &p_remote) override;
 
 	// Stubs: see class comment above. Not implemented yet.
 	virtual void _set_credentials(const String &p_username, const String &p_password, const String &p_ssh_public_key_path, const String &p_ssh_private_key_path, const String &p_ssh_passphrase) override;
 	virtual TypedArray<Dictionary> _get_previous_commits(int32_t p_max_commits) override;
-	virtual TypedArray<String> _get_branch_list() override;
-	virtual String _get_current_branch_name() override;
-	virtual TypedArray<String> _get_remotes() override;
+	virtual void _create_remote(const String &p_remote_name, const String &p_remote_url) override;
+	virtual void _remove_remote(const String &p_remote_name) override;
+	virtual void _fetch(const String &p_remote) override;
 
 private:
 	// The directory containing the repository's .lore folder. Assumed to be

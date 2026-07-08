@@ -167,22 +167,111 @@ TypedArray<Dictionary> LoreVCSPlugin::_get_previous_commits(int32_t p_max_commit
 	return TypedArray<Dictionary>();
 }
 
+void LoreVCSPlugin::_create_remote(const String &p_remote_name, const String &p_remote_url) {
+	// Lore has one server per repository, configured at `lore repository
+	// create`/`clone` time, not a runtime-addable list of named remotes like
+	// Git's — there's no lore-capi operation this maps onto.
+}
+
+void LoreVCSPlugin::_remove_remote(const String &p_remote_name) {
+	// See _create_remote.
+}
+
+void LoreVCSPlugin::_fetch(const String &p_remote) {
+	// TODO: Lore has no fetch-without-integrating operation the way Git
+	// does (see lore_ffi::LoreClient::pull, which is the closest
+	// equivalent and always integrates). Leaving this a no-op rather than
+	// silently calling pull() from here, since a "Fetch" button that
+	// secretly performs a full sync would surprise anyone used to Git's
+	// fetch/pull distinction.
+}
+
 TypedArray<String> LoreVCSPlugin::_get_branch_list() {
-	// TODO: wrap lore_branch_list in lore_ffi.
-	return TypedArray<String>();
+	TypedArray<String> result;
+
+	std::vector<std::string> branches;
+	lore_ffi::LoreResult branch_result = lore_ffi::LoreClient::branch_list(repository_path.utf8().get_data(), branches);
+	if (!branch_result.ok) {
+		popup_error(String("Lore branch list failed: ") + String(branch_result.error_message.c_str()));
+		return result;
+	}
+
+	for (const std::string &branch : branches) {
+		result.push_back(String(branch.c_str()));
+	}
+	return result;
 }
 
 String LoreVCSPlugin::_get_current_branch_name() {
-	// TODO: wrap lore_branch_info (or lore_repository_status's revision
-	// event, which already reports the current branch) in lore_ffi.
-	return String();
+	std::string branch_name;
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::current_branch_name(repository_path.utf8().get_data(), branch_name);
+	if (!result.ok) {
+		popup_error(String("Lore current branch lookup failed: ") + String(result.error_message.c_str()));
+		return String();
+	}
+	return String(branch_name.c_str());
+}
+
+bool LoreVCSPlugin::_checkout_branch(const String &p_branch_name) {
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::checkout_branch(repository_path.utf8().get_data(), p_branch_name.utf8().get_data());
+	if (!result.ok) {
+		popup_error(String("Lore checkout failed: ") + String(result.error_message.c_str()));
+		return false;
+	}
+	return true;
+}
+
+void LoreVCSPlugin::_create_branch(const String &p_branch_name) {
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::create_branch(repository_path.utf8().get_data(), p_branch_name.utf8().get_data());
+	if (!result.ok) {
+		popup_error(String("Lore create branch failed: ") + String(result.error_message.c_str()));
+	}
+}
+
+void LoreVCSPlugin::_remove_branch(const String &p_branch_name) {
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::remove_branch(repository_path.utf8().get_data(), p_branch_name.utf8().get_data());
+	if (!result.ok) {
+		popup_error(String("Lore remove (archive) branch failed: ") + String(result.error_message.c_str()));
+	}
 }
 
 TypedArray<String> LoreVCSPlugin::_get_remotes() {
-	// TODO: Lore has no Git-style multiple-named-remotes concept (a
-	// repository has one configured server); wrap lore_repository_config_get
-	// in lore_ffi and surface it as a single-entry pseudo-remote list.
-	return TypedArray<String>();
+	TypedArray<String> result;
+
+	std::string url;
+	lore_ffi::LoreResult remote_result = lore_ffi::LoreClient::remote_url(repository_path.utf8().get_data(), url);
+	if (!remote_result.ok) {
+		popup_error(String("Lore remote lookup failed: ") + String(remote_result.error_message.c_str()));
+		return result;
+	}
+	if (!url.empty()) {
+		result.push_back(String(url.c_str()));
+	}
+	return result;
+}
+
+void LoreVCSPlugin::_push(const String &p_remote, bool p_force) {
+	// p_remote is ignored: Lore has one configured remote per repository
+	// (see _get_remotes), so there's no separate named-remote to select.
+	std::string current_branch;
+	lore_ffi::LoreResult branch_result = lore_ffi::LoreClient::current_branch_name(repository_path.utf8().get_data(), current_branch);
+	if (!branch_result.ok) {
+		popup_error(String("Lore push failed: ") + String(branch_result.error_message.c_str()));
+		return;
+	}
+
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::push(repository_path.utf8().get_data(), current_branch);
+	if (!result.ok) {
+		popup_error(String("Lore push failed: ") + String(result.error_message.c_str()));
+	}
+}
+
+void LoreVCSPlugin::_pull(const String &p_remote) {
+	// p_remote is ignored: see _push.
+	lore_ffi::LoreResult result = lore_ffi::LoreClient::pull(repository_path.utf8().get_data());
+	if (!result.ok) {
+		popup_error(String("Lore pull failed: ") + String(result.error_message.c_str()));
+	}
 }
 
 TypedArray<Dictionary> LoreVCSPlugin::_get_modified_files_data() {

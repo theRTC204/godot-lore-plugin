@@ -99,6 +99,36 @@ public:
 	// fold newly staged changes into the previous revision, because
 	// lore_revision_amend's arguments are message-only.
 	static LoreResult amend(const std::string &p_repository_path, const std::string &p_message);
+
+	// Lists all (non-archived) local branch names.
+	static LoreResult branch_list(const std::string &p_repository_path, std::vector<std::string> &r_branches);
+
+	// Reports the name of the currently checked-out branch. Cheap: uses
+	// lore_repository_status with revision_only set, so it costs a revision
+	// lookup, not a file-status scan.
+	static LoreResult current_branch_name(const std::string &p_repository_path, std::string &r_branch_name);
+
+	// Switches the working tree to `p_branch_name`.
+	static LoreResult checkout_branch(const std::string &p_repository_path, const std::string &p_branch_name);
+
+	// Creates a new branch named `p_branch_name` at the current revision.
+	static LoreResult create_branch(const std::string &p_repository_path, const std::string &p_branch_name);
+
+	// Archives (Lore has no true delete) the branch named `p_branch_name`.
+	static LoreResult remove_branch(const std::string &p_repository_path, const std::string &p_branch_name);
+
+	// Reads the repository's configured remote URL. Lore has one server per
+	// repository, not Git's multiple-named-remotes model, so this is the
+	// entire "remote list."
+	static LoreResult remote_url(const std::string &p_repository_path, std::string &r_remote_url);
+
+	// Pushes the current branch to the configured remote.
+	static LoreResult push(const std::string &p_repository_path, const std::string &p_branch_name);
+
+	// Syncs the working tree to the current branch's remote tip (Git's
+	// "pull": fetch + integrate, in one step — Lore has no separate
+	// fetch-without-integrating operation).
+	static LoreResult pull(const std::string &p_repository_path);
 };
 
 } // namespace lore_ffi

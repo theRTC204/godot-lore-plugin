@@ -7,10 +7,14 @@
 //   lore_ffi_test <path-to-lore-repository>
 //   lore_ffi_test <path-to-lore-repository> --write-ops-demo <commit-message>
 //   lore_ffi_test <path-to-lore-repository> --discard-demo <repository-relative-path>
+//   lore_ffi_test <path-to-lore-repository> --remote-info
+//   lore_ffi_test <path-to-lore-repository> --branch-demo <new-branch-name>
+//   lore_ffi_test <path-to-lore-repository> --push-demo <commit-message>
+//   lore_ffi_test <path-to-lore-repository> --pull-demo
 //
-// The two demo modes mutate the repository (stage/unstage/commit, or
-// discard a file entirely) — run them against a disposable fixture, not
-// anything you care about.
+// All demo modes except --remote-info mutate the repository (stage/unstage/
+// commit, discard a file, create/checkout a branch, push, or pull) — run
+// them against a disposable fixture, not anything you care about.
 
 #include "lore_ffi/lore_client.h"
 
@@ -161,11 +165,138 @@ int run_discard_demo(const std::string &p_repository_path, const std::string &p_
 	return print_status(p_repository_path, files) ? 0 : 1;
 }
 
+int run_remote_info(const std::string &p_repository_path) {
+	int exit_code = 0;
+
+	std::vector<std::string> branches;
+	lore_ffi::LoreResult branch_list_result = lore_ffi::LoreClient::branch_list(p_repository_path, branches);
+	if (!branch_list_result.ok) {
+		std::fprintf(stderr, "branch_list failed: %s\n", branch_list_result.error_message.c_str());
+		exit_code = 1;
+	} else {
+		std::printf("branches:\n");
+		for (const std::string &branch : branches) {
+			std::printf("  %s\n", branch.c_str());
+		}
+	}
+
+	std::string current_branch;
+	lore_ffi::LoreResult current_result = lore_ffi::LoreClient::current_branch_name(p_repository_path, current_branch);
+	if (!current_result.ok) {
+		std::fprintf(stderr, "current_branch_name failed: %s\n", current_result.error_message.c_str());
+		exit_code = 1;
+	} else {
+		std::printf("current branch: %s\n", current_branch.c_str());
+	}
+
+	std::string url;
+	lore_ffi::LoreResult remote_result = lore_ffi::LoreClient::remote_url(p_repository_path, url);
+	if (!remote_result.ok) {
+		std::fprintf(stderr, "remote_url failed: %s\n", remote_result.error_message.c_str());
+		exit_code = 1;
+	} else {
+		std::printf("remote url: %s\n", url.c_str());
+	}
+
+	return exit_code;
+}
+
+// Creates a new branch, checks it out, and prints branch_list/
+// current_branch_name before and after to confirm both took effect.
+int run_branch_demo(const std::string &p_repository_path, const std::string &p_branch_name) {
+	std::printf("== before ==\n");
+	if (run_remote_info(p_repository_path) != 0) {
+		return 1;
+	}
+
+	std::printf("\n== create_branch(%s) ==\n", p_branch_name.c_str());
+	lore_ffi::LoreResult create_result = lore_ffi::LoreClient::create_branch(p_repository_path, p_branch_name);
+	if (!create_result.ok) {
+		std::fprintf(stderr, "create_branch failed: %s\n", create_result.error_message.c_str());
+		return 1;
+	}
+
+	std::printf("\n== checkout_branch(%s) ==\n", p_branch_name.c_str());
+	lore_ffi::LoreResult checkout_result = lore_ffi::LoreClient::checkout_branch(p_repository_path, p_branch_name);
+	if (!checkout_result.ok) {
+		std::fprintf(stderr, "checkout_branch failed: %s\n", checkout_result.error_message.c_str());
+		return 1;
+	}
+
+	std::printf("\n== after ==\n");
+	return run_remote_info(p_repository_path);
+}
+
+// Stages every unstaged file, commits, and pushes the current branch.
+int run_push_demo(const std::string &p_repository_path, const std::string &p_commit_message) {
+	std::vector<lore_ffi::FileStatus> files;
+	if (!print_status(p_repository_path, files)) {
+		return 1;
+	}
+
+	std::vector<std::string> unstaged_paths;
+	for (const lore_ffi::FileStatus &file : files) {
+		if (!file.staged) {
+			unstaged_paths.push_back(file.path);
+		}
+	}
+
+	if (!unstaged_paths.empty()) {
+		std::printf("\n== stage(%zu files) ==\n", unstaged_paths.size());
+		lore_ffi::LoreResult stage_result = lore_ffi::LoreClient::stage(p_repository_path, unstaged_paths);
+		if (!stage_result.ok) {
+			std::fprintf(stderr, "stage failed: %s\n", stage_result.error_message.c_str());
+			return 1;
+		}
+
+		std::printf("\n== commit(\"%s\") ==\n", p_commit_message.c_str());
+		lore_ffi::LoreResult commit_result = lore_ffi::LoreClient::commit(p_repository_path, p_commit_message);
+		if (!commit_result.ok) {
+			std::fprintf(stderr, "commit failed: %s\n", commit_result.error_message.c_str());
+			return 1;
+		}
+	} else {
+		std::printf("\n(nothing unstaged; pushing whatever is already committed)\n");
+	}
+
+	std::string current_branch;
+	lore_ffi::LoreResult current_result = lore_ffi::LoreClient::current_branch_name(p_repository_path, current_branch);
+	if (!current_result.ok) {
+		std::fprintf(stderr, "current_branch_name failed: %s\n", current_result.error_message.c_str());
+		return 1;
+	}
+
+	std::printf("\n== push(%s) ==\n", current_branch.c_str());
+	lore_ffi::LoreResult push_result = lore_ffi::LoreClient::push(p_repository_path, current_branch);
+	if (!push_result.ok) {
+		std::fprintf(stderr, "push failed: %s\n", push_result.error_message.c_str());
+		return 1;
+	}
+	std::printf("push succeeded\n");
+	return 0;
+}
+
+int run_pull_demo(const std::string &p_repository_path) {
+	std::printf("== before ==\n");
+	std::vector<lore_ffi::FileStatus> files;
+	print_status(p_repository_path, files);
+
+	std::printf("\n== pull ==\n");
+	lore_ffi::LoreResult pull_result = lore_ffi::LoreClient::pull(p_repository_path);
+	if (!pull_result.ok) {
+		std::fprintf(stderr, "pull failed: %s\n", pull_result.error_message.c_str());
+		return 1;
+	}
+
+	std::printf("\n== after ==\n");
+	return print_status(p_repository_path, files) ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
 	if (argc < 2) {
-		std::fprintf(stderr, "usage: %s <path-to-lore-repository> [--write-ops-demo <message> | --discard-demo <path>]\n", argv[0]);
+		std::fprintf(stderr, "usage: %s <path-to-lore-repository> [--write-ops-demo <message> | --discard-demo <path> | --remote-info | --branch-demo <name> | --push-demo <message> | --pull-demo]\n", argv[0]);
 		return 2;
 	}
 
@@ -177,6 +308,14 @@ int main(int argc, char **argv) {
 		exit_code = run_write_ops_demo(repository_path, argv[3]);
 	} else if (argc >= 4 && std::string(argv[2]) == "--discard-demo") {
 		exit_code = run_discard_demo(repository_path, argv[3]);
+	} else if (argc >= 3 && std::string(argv[2]) == "--remote-info") {
+		exit_code = run_remote_info(repository_path);
+	} else if (argc >= 4 && std::string(argv[2]) == "--branch-demo") {
+		exit_code = run_branch_demo(repository_path, argv[3]);
+	} else if (argc >= 4 && std::string(argv[2]) == "--push-demo") {
+		exit_code = run_push_demo(repository_path, argv[3]);
+	} else if (argc >= 3 && std::string(argv[2]) == "--pull-demo") {
+		exit_code = run_pull_demo(repository_path);
 	} else {
 		exit_code = run_status_diff(repository_path);
 	}

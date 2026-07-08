@@ -204,4 +204,126 @@ LoreResult LoreClient::amend(const std::string &p_repository_path, const std::st
 	return to_lore_result(LoreCall::invoke<lore_revision_amend_args_t>(&lore_revision_amend, globals, args, &ignore_events));
 }
 
+LoreResult LoreClient::branch_list(const std::string &p_repository_path, std::vector<std::string> &r_branches) {
+	r_branches.clear();
+
+	lore_global_args_t globals = make_global_args(p_repository_path);
+	lore_branch_list_args_t args{};
+
+	LoreCallResult call_result = LoreCall::invoke<lore_branch_list_args_t>(
+			&lore_branch_list,
+			globals,
+			args,
+			[&r_branches](const lore_event_t &p_event) {
+				if (p_event.tag != LORE_EVENT_BRANCH_LIST_ENTRY) {
+					return;
+				}
+				// A repository connected to a remote reports every branch
+				// once per location (local and remote both, even when it's
+				// the same branch known in both places — confirmed against
+				// the `lore branch list` CLI's own "Local branches"/"Remote
+				// branches" sections). Godot's branch dropdown just wants
+				// names to check out, so only list the ones actually
+				// present locally.
+				if (p_event.branch_list_entry.location != LORE_BRANCH_LOCATION_LOCAL) {
+					return;
+				}
+				r_branches.push_back(from_lore_string(p_event.branch_list_entry.name));
+			});
+
+	return to_lore_result(call_result);
+}
+
+LoreResult LoreClient::current_branch_name(const std::string &p_repository_path, std::string &r_branch_name) {
+	r_branch_name.clear();
+
+	lore_global_args_t globals = make_global_args(p_repository_path);
+	lore_repository_status_args_t args{};
+	args.revision_only = 1;
+
+	LoreCallResult call_result = LoreCall::invoke<lore_repository_status_args_t>(
+			&lore_repository_status,
+			globals,
+			args,
+			[&r_branch_name](const lore_event_t &p_event) {
+				if (p_event.tag != LORE_EVENT_REPOSITORY_STATUS_REVISION) {
+					return;
+				}
+				r_branch_name = from_lore_string(p_event.repository_status_revision.branch_name);
+			});
+
+	return to_lore_result(call_result);
+}
+
+LoreResult LoreClient::checkout_branch(const std::string &p_repository_path, const std::string &p_branch_name) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_branch_switch_args_t args{};
+	args.branch = to_lore_string(p_branch_name);
+
+	return to_lore_result(LoreCall::invoke<lore_branch_switch_args_t>(&lore_branch_switch, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::create_branch(const std::string &p_repository_path, const std::string &p_branch_name) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_branch_create_args_t args{};
+	args.branch = to_lore_string(p_branch_name);
+
+	return to_lore_result(LoreCall::invoke<lore_branch_create_args_t>(&lore_branch_create, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::remove_branch(const std::string &p_repository_path, const std::string &p_branch_name) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_branch_archive_args_t args{};
+	args.branch = to_lore_string(p_branch_name);
+
+	return to_lore_result(LoreCall::invoke<lore_branch_archive_args_t>(&lore_branch_archive, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::remote_url(const std::string &p_repository_path, std::string &r_remote_url) {
+	r_remote_url.clear();
+
+	lore_global_args_t globals = make_global_args(p_repository_path);
+	// `key` must be a named local, not a temporary: to_lore_string returns a
+	// pointer into its argument's own buffer, and a temporary's buffer is
+	// freed at the end of this statement, before the call ever reads it
+	// (verified empirically: using a temporary here made
+	// lore_repository_config_get reject the call outright).
+	static const std::string key_remote_url = "remote_url";
+	lore_repository_config_get_args_t args{};
+	args.key = to_lore_string(key_remote_url);
+
+	LoreCallResult call_result = LoreCall::invoke<lore_repository_config_get_args_t>(
+			&lore_repository_config_get,
+			globals,
+			args,
+			[&r_remote_url](const lore_event_t &p_event) {
+				if (p_event.tag != LORE_EVENT_REPOSITORY_CONFIG_GET) {
+					return;
+				}
+				r_remote_url = from_lore_string(p_event.repository_config_get.value);
+			});
+
+	return to_lore_result(call_result);
+}
+
+LoreResult LoreClient::push(const std::string &p_repository_path, const std::string &p_branch_name) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_branch_push_args_t args{};
+	args.branch = to_lore_string(p_branch_name);
+
+	return to_lore_result(LoreCall::invoke<lore_branch_push_args_t>(&lore_branch_push, globals, args, &ignore_events));
+}
+
+LoreResult LoreClient::pull(const std::string &p_repository_path) {
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_revision_sync_args_t args{};
+
+	return to_lore_result(LoreCall::invoke<lore_revision_sync_args_t>(&lore_revision_sync, globals, args, &ignore_events));
+}
+
 } // namespace lore_ffi
