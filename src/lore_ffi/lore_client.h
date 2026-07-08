@@ -48,10 +48,15 @@ struct FileDiff {
 	FileAction action = FileAction::Keep;
 };
 
-// Reports success/failure and, on failure, the message from Lore's own
-// error reporting (see lore_error_detail_t / lore_complete_event_data_t).
+// Reports success/failure and, on failure, the message and status code from
+// Lore's own error reporting (see lore_error_detail_t /
+// lore_complete_event_data_t). `error_message` can be empty even when `ok`
+// is false — Lore doesn't always populate a message alongside a failing
+// status — so callers displaying this to a user should fall back to
+// `status` rather than show an empty string.
 struct LoreResult {
 	bool ok = true;
+	int32_t status = 0;
 	std::string error_message;
 };
 

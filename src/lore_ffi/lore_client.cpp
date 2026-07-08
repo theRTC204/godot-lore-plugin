@@ -51,6 +51,7 @@ std::vector<lore_string_t> to_path_array(const std::vector<std::string> &p_paths
 LoreResult to_lore_result(const LoreCallResult &p_call_result) {
 	LoreResult result;
 	result.ok = p_call_result.ok();
+	result.status = p_call_result.status;
 	result.error_message = p_call_result.error_message;
 	return result;
 }
@@ -87,9 +88,18 @@ LoreResult LoreClient::status(const std::string &p_repository_path, std::vector<
 	// dirty (from a prior `lore dirty`/stage/scan); a file the editor's
 	// FileSystem dock just created or deleted on disk, that Lore has never
 	// been told about, is invisible until something walks the filesystem.
-	// A full scan on every status refresh is the correct-but-slow choice for
-	// now; the fast path (feeding EditorFileSystem's own change signals into
-	// lore_file_dirty instead of rescanning) belongs to a later polish pass.
+	//
+	// A reactive fast path (feeding EditorFileSystem's own change signals
+	// into lore_file_dirty instead of rescanning) was investigated and
+	// rejected: Godot's EditorFileSystem only fires path-specific signals
+	// (resources_reimporting/resources_reimported/resources_reload) for
+	// files that go through its *import* pipeline. A plain text file, or
+	// any type Godot doesn't import, changes with no signal at all —
+	// `filesystem_changed` fires but carries no path information. Driving
+	// dirty-tracking off that coverage would silently stop detecting
+	// changes to whole categories of files, which is a worse bug than the
+	// full scan's cost. A full scan on every status refresh remains the
+	// correct choice.
 	args.scan = 1;
 
 	LoreCallResult call_result = LoreCall::invoke<lore_repository_status_args_t>(

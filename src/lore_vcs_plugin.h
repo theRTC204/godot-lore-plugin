@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lore_ffi/lore_client.h"
+
 #include <godot_cpp/classes/editor_vcs_interface.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -64,6 +66,13 @@ public:
 	virtual void _fetch(const String &p_remote) override;
 
 private:
+	// Reports a failed lore_ffi call to the user via popup_error, as
+	// "<p_action>: <message>". Falls back to the raw status code when Lore
+	// didn't populate an error message (it doesn't always, even for a
+	// failing call) so the popup is never just "<p_action>: " with nothing
+	// after it.
+	void report_error(const String &p_action, const lore_ffi::LoreResult &p_result);
+
 	// The directory containing the repository's .lore folder. Assumed to be
 	// exactly the Godot project root (what the editor passes to
 	// _initialize) for now; Lore does not walk upward looking for .lore the

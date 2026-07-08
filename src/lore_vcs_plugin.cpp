@@ -139,6 +139,13 @@ ParsedDiff parse_unified_diff(const std::string &p_patch) {
 void LoreVCSPlugin::_bind_methods() {
 }
 
+void LoreVCSPlugin::report_error(const String &p_action, const lore_ffi::LoreResult &p_result) {
+	String message = p_result.error_message.empty()
+			? String("(no error message; status ") + String::num_int64(p_result.status) + ")"
+			: String(p_result.error_message.c_str());
+	popup_error(p_action + String(": ") + message);
+}
+
 bool LoreVCSPlugin::_initialize(const String &p_project_path) {
 	repository_path = p_project_path;
 	lore_ffi::LoreClient::initialize();
@@ -192,7 +199,7 @@ TypedArray<String> LoreVCSPlugin::_get_branch_list() {
 	std::vector<std::string> branches;
 	lore_ffi::LoreResult branch_result = lore_ffi::LoreClient::branch_list(repository_path.utf8().get_data(), branches);
 	if (!branch_result.ok) {
-		popup_error(String("Lore branch list failed: ") + String(branch_result.error_message.c_str()));
+		report_error("Lore branch list failed", branch_result);
 		return result;
 	}
 
@@ -206,7 +213,7 @@ String LoreVCSPlugin::_get_current_branch_name() {
 	std::string branch_name;
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::current_branch_name(repository_path.utf8().get_data(), branch_name);
 	if (!result.ok) {
-		popup_error(String("Lore current branch lookup failed: ") + String(result.error_message.c_str()));
+		report_error("Lore current branch lookup failed", result);
 		return String();
 	}
 	return String(branch_name.c_str());
@@ -215,7 +222,7 @@ String LoreVCSPlugin::_get_current_branch_name() {
 bool LoreVCSPlugin::_checkout_branch(const String &p_branch_name) {
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::checkout_branch(repository_path.utf8().get_data(), p_branch_name.utf8().get_data());
 	if (!result.ok) {
-		popup_error(String("Lore checkout failed: ") + String(result.error_message.c_str()));
+		report_error("Lore checkout failed", result);
 		return false;
 	}
 	return true;
@@ -224,14 +231,14 @@ bool LoreVCSPlugin::_checkout_branch(const String &p_branch_name) {
 void LoreVCSPlugin::_create_branch(const String &p_branch_name) {
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::create_branch(repository_path.utf8().get_data(), p_branch_name.utf8().get_data());
 	if (!result.ok) {
-		popup_error(String("Lore create branch failed: ") + String(result.error_message.c_str()));
+		report_error("Lore create branch failed", result);
 	}
 }
 
 void LoreVCSPlugin::_remove_branch(const String &p_branch_name) {
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::remove_branch(repository_path.utf8().get_data(), p_branch_name.utf8().get_data());
 	if (!result.ok) {
-		popup_error(String("Lore remove (archive) branch failed: ") + String(result.error_message.c_str()));
+		report_error("Lore remove (archive) branch failed", result);
 	}
 }
 
@@ -241,7 +248,7 @@ TypedArray<String> LoreVCSPlugin::_get_remotes() {
 	std::string url;
 	lore_ffi::LoreResult remote_result = lore_ffi::LoreClient::remote_url(repository_path.utf8().get_data(), url);
 	if (!remote_result.ok) {
-		popup_error(String("Lore remote lookup failed: ") + String(remote_result.error_message.c_str()));
+		report_error("Lore remote lookup failed", remote_result);
 		return result;
 	}
 	if (!url.empty()) {
@@ -256,13 +263,13 @@ void LoreVCSPlugin::_push(const String &p_remote, bool p_force) {
 	std::string current_branch;
 	lore_ffi::LoreResult branch_result = lore_ffi::LoreClient::current_branch_name(repository_path.utf8().get_data(), current_branch);
 	if (!branch_result.ok) {
-		popup_error(String("Lore push failed: ") + String(branch_result.error_message.c_str()));
+		report_error("Lore push failed", branch_result);
 		return;
 	}
 
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::push(repository_path.utf8().get_data(), current_branch);
 	if (!result.ok) {
-		popup_error(String("Lore push failed: ") + String(result.error_message.c_str()));
+		report_error("Lore push failed", result);
 	}
 }
 
@@ -270,7 +277,7 @@ void LoreVCSPlugin::_pull(const String &p_remote) {
 	// p_remote is ignored: see _push.
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::pull(repository_path.utf8().get_data());
 	if (!result.ok) {
-		popup_error(String("Lore pull failed: ") + String(result.error_message.c_str()));
+		report_error("Lore pull failed", result);
 	}
 }
 
@@ -280,7 +287,7 @@ TypedArray<Dictionary> LoreVCSPlugin::_get_modified_files_data() {
 	std::vector<lore_ffi::FileStatus> files;
 	lore_ffi::LoreResult status_result = lore_ffi::LoreClient::status(repository_path.utf8().get_data(), files);
 	if (!status_result.ok) {
-		popup_error(String("Lore status failed: ") + String(status_result.error_message.c_str()));
+		report_error("Lore status failed", status_result);
 		return result;
 	}
 
@@ -306,7 +313,7 @@ TypedArray<Dictionary> LoreVCSPlugin::_get_diff(const String &p_identifier, int3
 	std::vector<std::string> paths{ std::string(p_identifier.utf8().get_data()) };
 	lore_ffi::LoreResult diff_result = lore_ffi::LoreClient::diff(repository_path.utf8().get_data(), paths, diffs);
 	if (!diff_result.ok) {
-		popup_error(String("Lore diff failed: ") + String(diff_result.error_message.c_str()));
+		report_error("Lore diff failed", diff_result);
 		return result;
 	}
 
@@ -339,7 +346,7 @@ void LoreVCSPlugin::_stage_file(const String &p_file_path) {
 	std::vector<std::string> paths{ std::string(p_file_path.utf8().get_data()) };
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::stage(repository_path.utf8().get_data(), paths);
 	if (!result.ok) {
-		popup_error(String("Lore stage failed: ") + String(result.error_message.c_str()));
+		report_error("Lore stage failed", result);
 	}
 }
 
@@ -347,7 +354,7 @@ void LoreVCSPlugin::_unstage_file(const String &p_file_path) {
 	std::vector<std::string> paths{ std::string(p_file_path.utf8().get_data()) };
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::unstage(repository_path.utf8().get_data(), paths);
 	if (!result.ok) {
-		popup_error(String("Lore unstage failed: ") + String(result.error_message.c_str()));
+		report_error("Lore unstage failed", result);
 	}
 }
 
@@ -355,7 +362,7 @@ void LoreVCSPlugin::_discard_file(const String &p_file_path) {
 	std::vector<std::string> paths{ std::string(p_file_path.utf8().get_data()) };
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::discard(repository_path.utf8().get_data(), paths);
 	if (!result.ok) {
-		popup_error(String("Lore discard failed: ") + String(result.error_message.c_str()));
+		report_error("Lore discard failed", result);
 	}
 }
 
@@ -365,6 +372,6 @@ void LoreVCSPlugin::_commit(const String &p_msg) {
 
 	lore_ffi::LoreResult result = lore_ffi::LoreClient::commit(repo_path, message);
 	if (!result.ok) {
-		popup_error(String("Lore commit failed: ") + String(result.error_message.c_str()));
+		report_error("Lore commit failed", result);
 	}
 }
