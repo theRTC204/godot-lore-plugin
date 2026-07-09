@@ -2,6 +2,8 @@
 
 #include "lore_ffi/lore_client.h"
 
+#include <godot_cpp/classes/file_access.hpp>
+
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -149,7 +151,29 @@ void LoreVCSPlugin::report_error(const String &p_action, const lore_ffi::LoreRes
 bool LoreVCSPlugin::_initialize(const String &p_project_path) {
 	repository_path = p_project_path;
 	lore_ffi::LoreClient::initialize();
+	ensure_loreignore_exists();
 	return true;
+}
+
+void LoreVCSPlugin::ensure_loreignore_exists() {
+	String loreignore_path = repository_path.path_join(".loreignore");
+	if (FileAccess::file_exists(loreignore_path)) {
+		return;
+	}
+
+	Ref<FileAccess> file = FileAccess::open(loreignore_path, FileAccess::WRITE);
+	if (file.is_null()) {
+		return;
+	}
+
+	// Mirrors exactly what Godot's own built-in Git integration writes (see
+	// EditorVCSInterface::create_vcs_metadata_files in editor_vcs_interface.cpp):
+	// .godot/ is the editor's local cache, always safely regenerated; /android/
+	// is the Android export template scaffold, regenerated on demand via the
+	// editor's "Install Android Build Template" action.
+	file->store_line("# Godot 4+ specific ignores");
+	file->store_line(".godot/");
+	file->store_line("/android/");
 }
 
 bool LoreVCSPlugin::_shut_down() {

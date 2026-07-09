@@ -73,6 +73,13 @@ private:
 	// after it.
 	void report_error(const String &p_action, const lore_ffi::LoreResult &p_result);
 
+	// Writes a default .loreignore at the project root if one doesn't
+	// already exist. Mirrors exactly what Godot's own built-in Git
+	// integration writes (EditorVCSInterface::create_vcs_metadata_files) —
+	// see the .cpp for why. No dialog: the new file just shows up as an
+	// untracked file on the next status refresh, same as any other new file.
+	void ensure_loreignore_exists();
+
 	// The directory containing the repository's .lore folder. Assumed to be
 	// exactly the Godot project root (what the editor passes to
 	// _initialize) for now; Lore does not walk upward looking for .lore the
