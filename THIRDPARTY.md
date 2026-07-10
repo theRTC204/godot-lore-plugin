@@ -2,7 +2,7 @@
 
 This addon statically links [godot-cpp](https://github.com/godotengine/godot-cpp) into `godot-lore-plugin.windows.editor.x86_64.dll`, and ships [Lore](https://github.com/EpicGames/lore)'s compiled client library as `lore.dll`, a runtime dependency loaded alongside it. Both are MIT-licensed; their license texts are reproduced below in full, as required by that license.
 
-## godot-cpp
+## godotengine/godot-cpp
 
 MIT License
 
@@ -26,7 +26,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## Lore
+## EpicGames/lore
 
 MIT License
 

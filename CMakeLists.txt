@@ -75,7 +75,7 @@ endif()
 
 get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
 
-set(GODOT_LORE_PLUGIN_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/test_project/addons/godot-lore-plugin/bin")
+set(GODOT_LORE_PLUGIN_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/addons/godot-lore-plugin/bin")
 
 # gersemi: off
 set_target_properties(
@@ -103,4 +103,17 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/third_party/lore/bin/lore.dll"
         "${GODOT_LORE_PLUGIN_OUTPUT_DIR}/lore.dll"
+)
+
+# These live at the repo root (shared with the FFI test/build tooling around
+# them), but the addon folder is what actually ships, so mirror them in
+# alongside it. Copies, not the source of truth — gitignored.
+set(GODOT_LORE_PLUGIN_ADDON_DIR "${CMAKE_SOURCE_DIR}/addons/godot-lore-plugin")
+add_custom_command(
+    TARGET godot-lore-plugin POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/README.md"
+        "${CMAKE_SOURCE_DIR}/THIRDPARTY.md"
+        "${CMAKE_SOURCE_DIR}/LICENSE"
+        "${GODOT_LORE_PLUGIN_ADDON_DIR}"
 )
