@@ -1,4 +1,4 @@
-<img src="icon.svg" alt="Godot Lore Plugin logo" style="width:200px; height:200px; object-fit:cover; object-position:50% 50%;" />
+<img src="icon.svg" alt="Godot Lore Plugin logo" width="25%" height="auto" />
 
 # godot-lore-plugin
 
