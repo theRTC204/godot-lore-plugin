@@ -73,12 +73,32 @@ private:
 	// after it.
 	void report_error(const String &p_action, const lore_ffi::LoreResult &p_result);
 
+	// Shows p_message via popup_error, deferred to the next idle frame
+	// instead of calling it inline. Godot auto-calls _initialize (and, on
+	// success, the dock-refresh virtuals) while opening a project that was
+	// previously connected to this plugin, before the editor's own node tree
+	// has finished setting up its children; popping a dialog synchronously
+	// during that window fails with "Parent node is busy setting up
+	// children" / "!is_inside_tree()" instead of showing anything.
+	// Deferring runs it after the current setup step finishes, which is
+	// harmless for the interactive-click case too (one frame of delay is
+	// imperceptible).
+	void popup_error_deferred(const String &p_message);
+
 	// Writes a default .loreignore at the project root if one doesn't
 	// already exist. Mirrors exactly what Godot's own built-in Git
 	// integration writes (EditorVCSInterface::create_vcs_metadata_files) —
 	// see the .cpp for why. No dialog: the new file just shows up as an
 	// untracked file on the next status refresh, same as any other new file.
 	void ensure_loreignore_exists();
+
+	// True if a `.lore` repository directory already exists at
+	// `repository_path`. Lore has no `lore_ffi` operation that means
+	// "does a repository exist here" — every other call just fails with a
+	// generic rejection against a path that isn't one — so this checks the
+	// one on-disk marker directly (see lore_instance_id_t's doc comment in
+	// lore.h: the instance id lives at `.lore/instance`).
+	bool has_lore_repository() const;
 
 	// The directory containing the repository's .lore folder. Assumed to be
 	// exactly the Godot project root (what the editor passes to

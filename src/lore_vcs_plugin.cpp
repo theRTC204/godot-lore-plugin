@@ -2,6 +2,7 @@
 
 #include "lore_ffi/lore_client.h"
 
+#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 
 #include <cstdio>
@@ -145,11 +146,24 @@ void LoreVCSPlugin::report_error(const String &p_action, const lore_ffi::LoreRes
 	String message = p_result.error_message.empty()
 			? String("(no error message; status ") + String::num_int64(p_result.status) + ")"
 			: String(p_result.error_message.c_str());
-	popup_error(p_action + String(": ") + message);
+	popup_error_deferred(p_action + String(": ") + message);
+}
+
+void LoreVCSPlugin::popup_error_deferred(const String &p_message) {
+	call_deferred("popup_error", p_message);
 }
 
 bool LoreVCSPlugin::_initialize(const String &p_project_path) {
 	repository_path = p_project_path;
+
+	if (!has_lore_repository()) {
+		// Bail out before doing anything else: returning true here would
+		// have Godot immediately follow up with _get_branch_list,
+		// _get_remotes, _get_modified_files_data, etc. to populate the dock.
+		popup_error_deferred("Lore initialize failed: no .lore repository found at this project's root. Create one first (e.g. `lore repository create`), then connect again.");
+		return false;
+	}
+
 	lore_ffi::LoreClient::initialize();
 	ensure_loreignore_exists();
 	return true;
@@ -174,6 +188,10 @@ void LoreVCSPlugin::ensure_loreignore_exists() {
 	file->store_line("# Godot 4+ specific ignores");
 	file->store_line(".godot/");
 	file->store_line("/android/");
+}
+
+bool LoreVCSPlugin::has_lore_repository() const {
+	return DirAccess::dir_exists_absolute(repository_path.path_join(".lore"));
 }
 
 bool LoreVCSPlugin::_shut_down() {
