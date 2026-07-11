@@ -112,7 +112,6 @@ set(GODOT_LORE_PLUGIN_ADDON_DIR "${CMAKE_SOURCE_DIR}/addons/godot-lore-plugin")
 add_custom_command(
     TARGET godot-lore-plugin POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/README.md"
         "${CMAKE_SOURCE_DIR}/THIRDPARTY.md"
         "${CMAKE_SOURCE_DIR}/LICENSE"
         "${GODOT_LORE_PLUGIN_ADDON_DIR}"
