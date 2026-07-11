@@ -364,19 +364,22 @@ TypedArray<Dictionary> LoreVCSPlugin::_get_modified_files_data() {
 TypedArray<Dictionary> LoreVCSPlugin::_get_diff(const String &p_identifier, int32_t p_area) {
 	TypedArray<Dictionary> result;
 
-	if (p_area == EditorVCSInterface::TREE_AREA_COMMIT) {
-		// Diffing a specific commit (clicking one in the history dock) isn't
-		// wired up yet: that needs lore_revision_diff wrapped in lore_ffi,
-		// a separate phase from _get_previous_commits.
-		return result;
-	}
-
 	std::vector<lore_ffi::FileDiff> diffs;
-	std::vector<std::string> paths{ std::string(p_identifier.utf8().get_data()) };
-	lore_ffi::LoreResult diff_result = lore_ffi::LoreClient::diff(repository_path.utf8().get_data(), paths, diffs);
-	if (!diff_result.ok) {
-		report_error("Lore diff failed", diff_result);
-		return result;
+	if (p_area == EditorVCSInterface::TREE_AREA_COMMIT) {
+		// p_identifier is the revision hash set as `id` in create_commit
+		// (see _get_previous_commits), not a file path.
+		lore_ffi::LoreResult diff_result = lore_ffi::LoreClient::commit_diff(repository_path.utf8().get_data(), p_identifier.utf8().get_data(), diffs);
+		if (!diff_result.ok) {
+			report_error("Lore commit diff failed", diff_result);
+			return result;
+		}
+	} else {
+		std::vector<std::string> paths{ std::string(p_identifier.utf8().get_data()) };
+		lore_ffi::LoreResult diff_result = lore_ffi::LoreClient::diff(repository_path.utf8().get_data(), paths, diffs);
+		if (!diff_result.ok) {
+			report_error("Lore diff failed", diff_result);
+			return result;
+		}
 	}
 
 	for (const lore_ffi::FileDiff &file_diff : diffs) {

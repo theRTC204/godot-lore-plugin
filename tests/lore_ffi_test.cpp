@@ -105,6 +105,40 @@ bool print_history(const std::string &p_repository_path) {
 	return true;
 }
 
+bool print_commit_diff(const std::string &p_repository_path, const std::string &p_revision) {
+	std::printf("\n== lore_ffi::LoreClient::commit_diff(%s, %s) ==\n", p_repository_path.c_str(), p_revision.c_str());
+	std::vector<lore_ffi::FileDiff> diffs;
+	lore_ffi::LoreResult diff_result = lore_ffi::LoreClient::commit_diff(p_repository_path, p_revision, diffs);
+	if (!diff_result.ok) {
+		std::fprintf(stderr, "commit_diff failed: %s\n", diff_result.error_message.c_str());
+		return false;
+	}
+	for (const lore_ffi::FileDiff &diff_entry : diffs) {
+		std::printf("--- %s (%s) ---\n%s\n", diff_entry.path.c_str(), action_name(diff_entry.action), diff_entry.patch.c_str());
+	}
+	std::printf("  (%zu files)\n", diffs.size());
+	return true;
+}
+
+// Runs history first, then commit_diff for every revision it finds --
+// exercises both the common parent-diff path and the root-revision
+// (no-parent) fallback path in one pass.
+bool print_all_commit_diffs(const std::string &p_repository_path) {
+	std::vector<lore_ffi::RevisionHistoryEntry> entries;
+	lore_ffi::LoreResult history_result = lore_ffi::LoreClient::history(p_repository_path, 0, entries);
+	if (!history_result.ok) {
+		std::fprintf(stderr, "history failed (needed for commit diff demo): %s\n", history_result.error_message.c_str());
+		return false;
+	}
+	bool all_ok = true;
+	for (const lore_ffi::RevisionHistoryEntry &entry : entries) {
+		if (!print_commit_diff(p_repository_path, entry.revision)) {
+			all_ok = false;
+		}
+	}
+	return all_ok;
+}
+
 int run_status_diff(const std::string &p_repository_path) {
 	int exit_code = 0;
 	std::vector<lore_ffi::FileStatus> files;
@@ -115,6 +149,9 @@ int run_status_diff(const std::string &p_repository_path) {
 		exit_code = 1;
 	}
 	if (!print_history(p_repository_path)) {
+		exit_code = 1;
+	}
+	if (!print_all_commit_diffs(p_repository_path)) {
 		exit_code = 1;
 	}
 	return exit_code;

@@ -88,6 +88,82 @@ const char kMetadataKeyTimestamp[] = "timestamp";
 const char kMetadataKeyCreatedBy[] = "created-by";
 const char kMetadataKeyCommittedBy[] = "committed-by";
 
+// Real unified-diff patches for `p_source_revision` -> `p_target_revision`
+// (both full hex signatures), every changed file (empty `paths` means
+// everything). Backs LoreClient::commit_diff for any revision that has a
+// parent.
+LoreResult file_diff_between_revisions(const std::string &p_repository_path, const std::string &p_source_revision, const std::string &p_target_revision, std::vector<FileDiff> &r_diffs) {
+	r_diffs.clear();
+
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_file_diff_args_t args{};
+	args.source_revision = to_lore_string(p_source_revision);
+	args.target_revision = to_lore_string(p_target_revision);
+	args.context_lines = 3;
+
+	LoreCallResult call_result = LoreCall::invoke<lore_file_diff_args_t>(
+			&lore_file_diff,
+			globals,
+			args,
+			[&r_diffs](const lore_event_t &p_event) {
+				if (p_event.tag != LORE_EVENT_FILE_DIFF) {
+					return;
+				}
+				const lore_file_diff_event_data_t &data = p_event.file_diff;
+
+				FileDiff diff_entry;
+				diff_entry.path = from_lore_string(data.path);
+				diff_entry.patch = from_lore_string(data.patch);
+				diff_entry.action = to_file_action(data.action);
+				r_diffs.push_back(std::move(diff_entry));
+			});
+
+	return to_lore_result(call_result);
+}
+
+// Fallback for a revision with no parent (the repository's root revision):
+// lore_file_diff has no way to diff against an empty tree (its revision
+// resolver rejects an all-zero signature — verified against
+// lore-revision::revision::resolve, which errors RevisionNotFound whenever
+// the resolved hash is zero, and lore-revision::state::State::deserialize,
+// which is the only place a zero signature is treated as "empty state", is
+// never reached because resolve() rejects the zero signature first).
+// lore_revision_info's delta listing still works for the root revision (it
+// walks the revision's own tree rather than diffing two resolved
+// revisions), so this reports the same added files with no patch text
+// instead of leaving the commit diff view empty.
+LoreResult root_revision_files(const std::string &p_repository_path, const std::string &p_revision, std::vector<FileDiff> &r_diffs) {
+	r_diffs.clear();
+
+	lore_global_args_t globals = make_global_args(p_repository_path);
+
+	lore_revision_info_args_t args{};
+	args.revision = to_lore_string(p_revision);
+	args.delta = 1;
+
+	LoreCallResult call_result = LoreCall::invoke<lore_revision_info_args_t>(
+			&lore_revision_info,
+			globals,
+			args,
+			[&r_diffs](const lore_event_t &p_event) {
+				if (p_event.tag != LORE_EVENT_REVISION_INFO_DELTA) {
+					return;
+				}
+				const lore_revision_info_delta_event_data_t &data = p_event.revision_info_delta;
+				if (!data.flag_file) {
+					return; // Directories don't get their own diff entries.
+				}
+
+				FileDiff diff_entry;
+				diff_entry.path = from_lore_string(data.path);
+				diff_entry.action = to_file_action(data.action);
+				r_diffs.push_back(std::move(diff_entry));
+			});
+
+	return to_lore_result(call_result);
+}
+
 } // namespace
 
 void LoreClient::initialize() {
@@ -238,6 +314,51 @@ LoreResult LoreClient::history(const std::string &p_repository_path, uint32_t p_
 			});
 
 	return to_lore_result(call_result);
+}
+
+LoreResult LoreClient::revision_info(const std::string &p_repository_path, const std::string &p_revision, RevisionInfo &r_info) {
+	r_info = RevisionInfo();
+
+	lore_global_args_t globals = make_global_args(p_repository_path);
+	lore_revision_info_args_t args{};
+	args.revision = to_lore_string(p_revision);
+
+	LoreCallResult call_result = LoreCall::invoke<lore_revision_info_args_t>(
+			&lore_revision_info,
+			globals,
+			args,
+			[&r_info](const lore_event_t &p_event) {
+				if (p_event.tag != LORE_EVENT_REVISION_INFO) {
+					return;
+				}
+				const lore_revision_info_event_data_t &data = p_event.revision_info;
+
+				r_info.revision = to_hex(data.revision);
+				r_info.revision_number = data.revision_number;
+				r_info.parent = is_zero_hash(data.parent[0]) ? std::string() : to_hex(data.parent[0]);
+				r_info.parent_other = is_zero_hash(data.parent[1]) ? std::string() : to_hex(data.parent[1]);
+			});
+
+	return to_lore_result(call_result);
+}
+
+LoreResult LoreClient::commit_diff(const std::string &p_repository_path, const std::string &p_revision, std::vector<FileDiff> &r_diffs) {
+	r_diffs.clear();
+
+	RevisionInfo info;
+	LoreResult info_result = revision_info(p_repository_path, p_revision, info);
+	if (!info_result.ok) {
+		return info_result;
+	}
+
+	if (!info.parent.empty()) {
+		// Merge revisions have a second parent (info.parent_other), but
+		// this only diffs against the first: matches `git show`'s default
+		// for a merge commit (first-parent diff, no combined/--cc mode).
+		return file_diff_between_revisions(p_repository_path, info.parent, p_revision, r_diffs);
+	}
+
+	return root_revision_files(p_repository_path, p_revision, r_diffs);
 }
 
 LoreResult LoreClient::stage(const std::string &p_repository_path, const std::vector<std::string> &p_paths) {

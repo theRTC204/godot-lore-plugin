@@ -67,6 +67,16 @@ struct RevisionHistoryEntry {
 	int64_t unix_timestamp = 0; // seconds; converted from the "timestamp" metadata's milliseconds
 };
 
+// A revision's structural summary, as reported by `lore_revision_info`
+// (with neither delta nor metadata requested). Used to resolve a
+// revision's parent before diffing it against that parent.
+struct RevisionInfo {
+	std::string revision; // lowercase hex-encoded hash signature
+	uint64_t revision_number = 0;
+	std::string parent; // lowercase hex-encoded first parent hash; empty for the repository's root revision
+	std::string parent_other; // lowercase hex-encoded second (merge) parent hash; empty unless this is a merge revision
+};
+
 // Reports success/failure and, on failure, the message and status code from
 // Lore's own error reporting (see lore_error_detail_t /
 // lore_complete_event_data_t). `error_message` can be empty even when `ok`
@@ -106,6 +116,20 @@ public:
 	// default page size (100 as of this writing — see history_local in the
 	// `lore` crate).
 	static LoreResult history(const std::string &p_repository_path, uint32_t p_max_commits, std::vector<RevisionHistoryEntry> &r_entries);
+
+	// Resolves `p_revision`'s structural summary (hash, revision number,
+	// parent hashes). `p_revision` may be any signature Lore's own revision
+	// resolver accepts (a full hash, `branch@LATEST`, etc.); empty means the
+	// current revision.
+	static LoreResult revision_info(const std::string &p_repository_path, const std::string &p_revision, RevisionInfo &r_info);
+
+	// Reports the unified diff introduced by `p_revision` — i.e. the diff
+	// against its first parent. For the repository's root revision (no
+	// parent), Lore's revision resolver has no way to target an empty tree
+	// (see the .cpp for why), so this falls back to `lore_revision_info`'s
+	// delta listing: every file the root revision reports as added, with no
+	// patch text.
+	static LoreResult commit_diff(const std::string &p_repository_path, const std::string &p_revision, std::vector<FileDiff> &r_diffs);
 
 	// Stages `p_paths` for the next commit.
 	static LoreResult stage(const std::string &p_repository_path, const std::vector<std::string> &p_paths);

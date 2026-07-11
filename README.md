@@ -6,7 +6,7 @@ An in-editor Godot GDExtension bringing native support for Epic Games' [Lore](ht
 
 The plugin subclasses Godot's `EditorVCSInterface` and drives it via a vendored snapshot of Lore's C API (`lore-capi`/`lore.h`) — the same integration point Epic's own in-progress VS Code plugin is built against. Lore is linked dynamically (`lore.dll` + a small import lib), not statically: the raw staticlib archive `cargo`/`cbindgen` also produce is unlinked and runs into the hundreds of MB to multiple GB (no dead-code elimination happens until something actually links against it), whereas the `cdylib` build is already linked and stripped down to ~30MB. `lore.dll` ships alongside the extension's own DLL as a genuine runtime dependency.
 
-Status: core functionality in place and verified — status, diff, stage/unstage/discard, commit, branch list/current/checkout/create/remove, and push/pull against a real server. See "What works" and "Known limitations" below.
+Status: core functionality in place and verified — status, diff, stage/unstage/discard, commit, commit history (list and per-commit diff), branch list/current/checkout/create/remove, and push/pull against a real server. See "What works" and "Known limitations" below.
 
 ## Repository layout
 
@@ -33,6 +33,7 @@ tools/update-lore-snapshot.ps1  Rebuilds third_party/lore/ from a local Lore che
 - Status of staged / unstaged / conflict state and working-tree diff, in the Commit dock and diff panel
 - Stage, unstage, and discard changes (discarding a never-committed file removes it entirely, matching Git's plugin behavior)
 - Commit, with message
+- Commit history list (message, author, date) and per-commit diff, including the repository's initial commit
 - Branch list, current branch, checkout, create, and remove (archive — Lore has no true branch delete)
 - Push and pull against the repository's configured remote
 
@@ -40,7 +41,6 @@ tools/update-lore-snapshot.ps1  Rebuilds third_party/lore/ from a local Lore che
 
 These aren't bugs — they're either genuine gaps in what Lore's API offers versus Git, or scope not built out yet:
 
-- **No commit history view or per-commit diffing.** The Commit dock's history list stays empty; diffing only works against the current working tree, not an arbitrary past revision.
 - **No commit amend.** Lore's `amend` operation is currently limited to message-only changes.
 - **No credential/auth UI wiring.** The setup dialog's username/password/SSH fields don't do anything. This works today with a repository that's already authenticated (e.g. via the `lore` CLI, or an unauthenticated local server) — logging in through the editor itself isn't wired up.
 - **No "Fetch" button behavior.** Lore's `sync` operation always fetches *and* integrates in one step — there's no Git-style fetch-without-merging to map a separate Fetch action onto, so it's a no-op rather than a surprise full sync.
