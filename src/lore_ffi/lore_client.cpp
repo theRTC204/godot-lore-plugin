@@ -59,6 +59,35 @@ LoreResult to_lore_result(const LoreCallResult &p_call_result) {
 void ignore_events(const lore_event_t &) {
 }
 
+const char kHexDigits[] = "0123456789abcdef";
+
+std::string to_hex(const lore_hash_t &p_hash) {
+	std::string result;
+	result.reserve(sizeof(p_hash.data) * 2);
+	for (uint8_t byte : p_hash.data) {
+		result.push_back(kHexDigits[(byte >> 4) & 0xF]);
+		result.push_back(kHexDigits[byte & 0xF]);
+	}
+	return result;
+}
+
+bool is_zero_hash(const lore_hash_t &p_hash) {
+	for (uint8_t byte : p_hash.data) {
+		if (byte != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+// Well-known metadata keys Lore attaches to every revision (see
+// lore-revision/src/metadata.rs); mirrors what the `lore` CLI itself
+// matches on to print message/date/author.
+const char kMetadataKeyMessage[] = "message";
+const char kMetadataKeyTimestamp[] = "timestamp";
+const char kMetadataKeyCreatedBy[] = "created-by";
+const char kMetadataKeyCommittedBy[] = "committed-by";
+
 } // namespace
 
 void LoreClient::initialize() {
@@ -157,6 +186,55 @@ LoreResult LoreClient::diff(const std::string &p_repository_path, const std::vec
 				diff_entry.patch = from_lore_string(data.patch);
 				diff_entry.action = to_file_action(data.action);
 				r_diffs.push_back(std::move(diff_entry));
+			});
+
+	return to_lore_result(call_result);
+}
+
+LoreResult LoreClient::history(const std::string &p_repository_path, uint32_t p_max_commits, std::vector<RevisionHistoryEntry> &r_entries) {
+	r_entries.clear();
+
+	lore_global_args_t globals = make_global_args(p_repository_path);
+	lore_revision_history_args_t args{};
+	args.length = p_max_commits;
+
+	LoreCallResult call_result = LoreCall::invoke<lore_revision_history_args_t>(
+			&lore_revision_history,
+			globals,
+			args,
+			[&r_entries](const lore_event_t &p_event) {
+				if (p_event.tag == LORE_EVENT_REVISION_HISTORY_ENTRY) {
+					const lore_revision_history_entry_event_data_t &data = p_event.revision_history_entry;
+
+					RevisionHistoryEntry entry;
+					entry.revision = to_hex(data.revision);
+					entry.revision_number = data.revision_number;
+					entry.parent = is_zero_hash(data.parent[0]) ? std::string() : to_hex(data.parent[0]);
+					entry.parent_other = is_zero_hash(data.parent[1]) ? std::string() : to_hex(data.parent[1]);
+					r_entries.push_back(std::move(entry));
+					return;
+				}
+
+				if (p_event.tag != LORE_EVENT_METADATA || r_entries.empty()) {
+					return;
+				}
+				// Metadata events for a revision are streamed immediately
+				// after its LORE_EVENT_REVISION_HISTORY_ENTRY (see
+				// RevisionHistoryEntry's doc comment), so the most recently
+				// pushed entry is always the one they belong to.
+				const lore_metadata_event_data_t &data = p_event.metadata;
+				RevisionHistoryEntry &entry = r_entries.back();
+				std::string key = from_lore_string(data.key);
+
+				if (key == kMetadataKeyMessage && data.value.tag == LORE_METADATA_STRING) {
+					entry.message = from_lore_string(data.value.string);
+				} else if (key == kMetadataKeyTimestamp && data.value.tag == LORE_METADATA_NUMERIC) {
+					entry.unix_timestamp = static_cast<int64_t>(data.value.numeric / 1000);
+				} else if (key == kMetadataKeyCreatedBy && data.value.tag == LORE_METADATA_STRING) {
+					entry.author = from_lore_string(data.value.string);
+				} else if (key == kMetadataKeyCommittedBy && data.value.tag == LORE_METADATA_STRING && entry.author.empty()) {
+					entry.author = from_lore_string(data.value.string);
+				}
 			});
 
 	return to_lore_result(call_result);

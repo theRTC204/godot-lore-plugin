@@ -211,9 +211,29 @@ void LoreVCSPlugin::_set_credentials(const String &p_username, const String &p_p
 }
 
 TypedArray<Dictionary> LoreVCSPlugin::_get_previous_commits(int32_t p_max_commits) {
-	// TODO: wrap lore_revision_history in lore_ffi and populate this via
-	// create_commit(msg, author, id, unix_timestamp, offset_minutes).
-	return TypedArray<Dictionary>();
+	TypedArray<Dictionary> result;
+
+	std::vector<lore_ffi::RevisionHistoryEntry> entries;
+	uint32_t max_commits = p_max_commits > 0 ? static_cast<uint32_t>(p_max_commits) : 0;
+	lore_ffi::LoreResult history_result = lore_ffi::LoreClient::history(repository_path.utf8().get_data(), max_commits, entries);
+	if (!history_result.ok) {
+		report_error("Lore history failed", history_result);
+		return result;
+	}
+
+	for (const lore_ffi::RevisionHistoryEntry &entry : entries) {
+		// offset_minutes is always 0: Lore stores revision timestamps as
+		// absolute UTC instants with no per-revision timezone (confirmed
+		// against the `lore history` CLI, which always renders "+0000").
+		result.push_back(create_commit(
+				String(entry.message.c_str()),
+				String(entry.author.c_str()),
+				String(entry.revision.c_str()),
+				entry.unix_timestamp,
+				0));
+	}
+
+	return result;
 }
 
 void LoreVCSPlugin::_create_remote(const String &p_remote_name, const String &p_remote_url) {
@@ -345,9 +365,9 @@ TypedArray<Dictionary> LoreVCSPlugin::_get_diff(const String &p_identifier, int3
 	TypedArray<Dictionary> result;
 
 	if (p_area == EditorVCSInterface::TREE_AREA_COMMIT) {
-		// Diffing a specific commit isn't wired up yet: that needs
-		// lore_revision_diff, introduced alongside _get_previous_commits in
-		// a later phase.
+		// Diffing a specific commit (clicking one in the history dock) isn't
+		// wired up yet: that needs lore_revision_diff wrapped in lore_ffi,
+		// a separate phase from _get_previous_commits.
 		return result;
 	}
 

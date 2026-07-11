@@ -76,6 +76,35 @@ bool print_diff(const std::string &p_repository_path) {
 	return true;
 }
 
+bool print_history(const std::string &p_repository_path) {
+	std::printf("\n== lore_revision_history(%s) ==\n", p_repository_path.c_str());
+	std::vector<lore_ffi::RevisionHistoryEntry> entries;
+	lore_ffi::LoreResult history_result = lore_ffi::LoreClient::history(p_repository_path, 0, entries);
+	if (!history_result.ok) {
+		std::fprintf(stderr, "history failed: %s\n", history_result.error_message.c_str());
+		return false;
+	}
+	for (const lore_ffi::RevisionHistoryEntry &entry : entries) {
+		std::printf(
+				"Revision  : %llu\n"
+				"Signature : %s\n"
+				"Parent    : %s\n"
+				"Merge     : %s\n"
+				"Author    : %s\n"
+				"Timestamp : %lld\n"
+				"Message   : %s\n\n",
+				static_cast<unsigned long long>(entry.revision_number),
+				entry.revision.c_str(),
+				entry.parent.c_str(),
+				entry.parent_other.c_str(),
+				entry.author.c_str(),
+				static_cast<long long>(entry.unix_timestamp),
+				entry.message.c_str());
+	}
+	std::printf("  (%zu revisions)\n", entries.size());
+	return true;
+}
+
 int run_status_diff(const std::string &p_repository_path) {
 	int exit_code = 0;
 	std::vector<lore_ffi::FileStatus> files;
@@ -83,6 +112,9 @@ int run_status_diff(const std::string &p_repository_path) {
 		exit_code = 1;
 	}
 	if (!print_diff(p_repository_path)) {
+		exit_code = 1;
+	}
+	if (!print_history(p_repository_path)) {
 		exit_code = 1;
 	}
 	return exit_code;

@@ -48,6 +48,25 @@ struct FileDiff {
 	FileAction action = FileAction::Keep;
 };
 
+// One revision in a `lore_revision_history` listing, as reported by
+// LORE_EVENT_REVISION_HISTORY_ENTRY plus the LORE_EVENT_METADATA entries
+// that immediately follow it (see lore-revision's history() in
+// lore-revision/src/revision/history.rs: every entry event is followed by
+// the revision's full metadata bag, unconditionally — the well-known keys
+// "message", "timestamp", and "created-by"/"committed-by" are Lore's
+// equivalents of a commit's message, date, and author). Not documented in
+// lore.h's per-function event table, but verified against the `lore`
+// crate's own CLI, which relies on exactly this to print `lore history`.
+struct RevisionHistoryEntry {
+	std::string revision; // lowercase hex-encoded hash signature
+	uint64_t revision_number = 0;
+	std::string parent; // lowercase hex-encoded first parent hash; empty when there is none
+	std::string parent_other; // lowercase hex-encoded second (merge) parent hash; empty when there is none
+	std::string message;
+	std::string author; // "created-by" metadata, falling back to "committed-by"
+	int64_t unix_timestamp = 0; // seconds; converted from the "timestamp" metadata's milliseconds
+};
+
 // Reports success/failure and, on failure, the message and status code from
 // Lore's own error reporting (see lore_error_detail_t /
 // lore_complete_event_data_t). `error_message` can be empty even when `ok`
@@ -81,6 +100,12 @@ public:
 	// working tree against the current revision (empty `p_paths` diffs
 	// everything).
 	static LoreResult diff(const std::string &p_repository_path, const std::vector<std::string> &p_paths, std::vector<FileDiff> &r_diffs);
+
+	// Lists the revision history of the current branch, most recent first.
+	// `p_max_commits` caps the number of entries; 0 defers to Lore's own
+	// default page size (100 as of this writing — see history_local in the
+	// `lore` crate).
+	static LoreResult history(const std::string &p_repository_path, uint32_t p_max_commits, std::vector<RevisionHistoryEntry> &r_entries);
 
 	// Stages `p_paths` for the next commit.
 	static LoreResult stage(const std::string &p_repository_path, const std::vector<std::string> &p_paths);

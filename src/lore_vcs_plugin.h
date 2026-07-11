@@ -12,8 +12,9 @@ namespace godot {
 // GDExtension implementation of Godot's VCS plugin interface for the Lore
 // source control system, mirroring godot-git-plugin's role for Git. Real
 // functionality so far: status, working-tree diff, stage/unstage/discard,
-// commit, and branch list/current/checkout/create/remove (archive) plus
-// push/pull against the repository's single configured remote.
+// commit, commit history, and branch list/current/checkout/create/remove
+// (archive) plus push/pull against the repository's single configured
+// remote.
 //
 // Targets the Godot 4.3 GDExtension API (see GODOTCPP_API_VERSION in the
 // top-level CMakeLists.txt) to keep compatibility_minimum as low as
@@ -28,11 +29,11 @@ namespace godot {
 // "Required virtual method ... must be overridden before calling" every time
 // it's invoked, including several the dock's connect flow calls
 // unconditionally (set_credentials, get_previous_commits) regardless of
-// which panel is open. The remaining stubs below (auth, commit history,
-// remotes-as-a-concept, fetch) are honest no-ops for operations Lore either
-// doesn't support the way Git does (no multiple named remotes, no
-// fetch-without-integrating) or that need more design/infra than this phase
-// covers (auth, commit history) — not gaps in what's wired up so far.
+// which panel is open. The remaining stubs below (auth, remotes-as-a-concept,
+// fetch) are honest no-ops for operations Lore either doesn't support the way
+// Git does (no multiple named remotes, no fetch-without-integrating) or that
+// need more design/infra than this phase covers (auth) — not gaps in what's
+// wired up so far.
 class LoreVCSPlugin : public EditorVCSInterface {
 	GDCLASS(LoreVCSPlugin, EditorVCSInterface)
 
