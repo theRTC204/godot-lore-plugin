@@ -15,11 +15,11 @@ third_party/godot-cpp/bin/
 third_party/godot-cpp/gen/
 third_party/godot-cpp/build/
 
-# Compiled extension output
-addons/godot-lore-plugin/bin/*.dll
-addons/godot-lore-plugin/bin/*.pdb
-addons/godot-lore-plugin/bin/*.lib
-addons/godot-lore-plugin/bin/*.exp
+# Compiled extension output, one directory per platform (see the
+# .gdextension file's relative library paths)
+addons/godot-lore-plugin/windows/
+addons/godot-lore-plugin/linux/
+addons/godot-lore-plugin/macos/
 
 # Editor-generated UID sidecar for the .gdextension file
 addons/godot-lore-plugin/*.uid
