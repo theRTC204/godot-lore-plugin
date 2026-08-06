@@ -2,7 +2,7 @@ name: Validate plugin build
 
 # Full build of the GDExtension itself (godot-cpp + the lore crate + the
 # lore_ffi wrapper + godot-lore-plugin), on all three platforms the addon
-# targets.
+# targets, via the reusable per-platform build workflow.
 #
 # This validates that the plugin *compiles and links*, not that it produces
 # the exact shippable release artifact: macOS builds a single native arch
@@ -11,7 +11,8 @@ name: Validate plugin build
 # optimize/codegen/link pass can't be cached/made incremental and costs
 # ~20+ min per architecture regardless of dependency cache hits. A real
 # distributable macOS universal binary still requires the plain, override-free
-# `cmake -B build -DCMAKE_BUILD_TYPE=Release` README.md documents.
+# `cmake -B build -DCMAKE_BUILD_TYPE=Release` README.md documents — see
+# plugin-release.yml, which builds the real release artifact.
 
 on:
   push:
@@ -23,6 +24,7 @@ on:
       - third_party/godot-cpp
       - third_party/lore
       - .github/workflows/plugin-build.yml
+      - .github/workflows/plugin-build-platform.yml
   pull_request:
     paths:
       - src/**
@@ -31,10 +33,8 @@ on:
       - third_party/godot-cpp
       - third_party/lore
       - .github/workflows/plugin-build.yml
+      - .github/workflows/plugin-build-platform.yml
   workflow_dispatch:
-
-env:
-  LORE_CARGO_PROFILE: release
 
 jobs:
   cmake-build:
@@ -59,63 +59,13 @@ jobs:
             rust_targets: ""
             cmake_extra_args: "-DCMAKE_OSX_ARCHITECTURES=arm64"
             timeout_minutes: 60
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.timeout_minutes }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Both submodules are needed for a full build, unlike
-      # lore-crate-build.yml. Neither has nested submodules of its own, so
-      # no --recursive.
-      - name: Checkout submodules
-        run: git submodule update --init third_party/godot-cpp third_party/lore
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust_targets }}
-
-      - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: third_party/lore
-
-      # lore only ever changes when this commit changes, so a hit here lets
-      # CMakeLists.txt's lore_cargo_build target skip cargo entirely instead
-      # of relying on cargo's own (slower, always-partial) fingerprinting.
-      - name: Resolve lore submodule commit
-        id: lore-sha
-        shell: bash
-        run: echo "sha=$(git -C third_party/lore rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore cached lore artifact
-        id: lore-artifact-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: build/lore
-          key: lore-artifact-${{ runner.os }}-${{ runner.arch }}-${{ env.LORE_CARGO_PROFILE }}-${{ steps.lore-sha.outputs.sha }}
-
-      # release, not release-lto — see file header. Don't pass this (or the
+    uses: ./.github/workflows/plugin-build-platform.yml
+    with:
+      os: ${{ matrix.os }}
+      platform_dir: ${{ matrix.platform_dir }}
+      # release, not release-lto — see file header. Don't use this (or the
       # macOS arch override) when building a real release artifact.
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DLORE_CARGO_PROFILE=${{ env.LORE_CARGO_PROFILE }} ${{ matrix.cmake_extra_args }}
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Save lore artifact cache
-        if: steps.lore-artifact-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: build/lore
-          key: lore-artifact-${{ runner.os }}-${{ runner.arch }}-${{ env.LORE_CARGO_PROFILE }}-${{ steps.lore-sha.outputs.sha }}
-
-      # Filename-agnostic: single-arch macOS output isn't named the same as
-      # the "universal" release artifact, so just confirm something staged.
-      - name: Verify staged artifacts exist
-        shell: bash
-        run: |
-          ls -la "${{ matrix.platform_dir }}"
-          test -n "$(find "${{ matrix.platform_dir }}" -maxdepth 1 -iname 'godot-lore-plugin*' -print -quit)"
-          test -n "$(find "${{ matrix.platform_dir }}" -maxdepth 1 \( -iname 'lore.dll' -o -iname 'liblore.*' \) -print -quit)"
+      cargo_profile: release
+      rust_targets: ${{ matrix.rust_targets }}
+      cmake_extra_args: ${{ matrix.cmake_extra_args }}
+      timeout_minutes: ${{ matrix.timeout_minutes }}

@@ -1,0 +1,116 @@
+name: Build plugin (platform)
+
+# Reusable per-platform build: checkout, submodules, Rust/cargo setup, the
+# cached lore crate build, and the CMake configure/build that produces
+# addons/godot-lore-plugin/<platform>/. Called by plugin-build.yml (routine
+# CI validation, fast settings) and plugin-release.yml (real release
+# artifacts, real settings) with different inputs rather than duplicating
+# these steps in both files.
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: Runner label (e.g. windows-latest)
+        required: true
+        type: string
+      platform_dir:
+        description: addons/godot-lore-plugin/<platform> staging directory this build populates
+        required: true
+        type: string
+      cargo_profile:
+        description: Cargo profile to build the lore crate with (release or release-lto)
+        required: true
+        type: string
+      rust_targets:
+        description: Extra Rust targets to install (space-separated), beyond the host default
+        required: false
+        type: string
+        default: ""
+      cmake_extra_args:
+        description: Extra arguments passed to the CMake configure step
+        required: false
+        type: string
+        default: ""
+      timeout_minutes:
+        description: Job timeout in minutes
+        required: false
+        type: number
+        default: 60
+      upload_artifact:
+        description: Whether to upload platform_dir as a workflow artifact
+        required: false
+        type: boolean
+        default: false
+      artifact_name:
+        description: Name for the uploaded artifact (required when upload_artifact is true)
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Both submodules are needed for a full build. Neither has nested
+      # submodules of its own, so no --recursive.
+      - name: Checkout submodules
+        run: git submodule update --init third_party/godot-cpp third_party/lore
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ inputs.rust_targets }}
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: third_party/lore
+
+      # lore only ever changes when this commit changes, so a hit here lets
+      # CMakeLists.txt's lore_cargo_build target skip cargo entirely instead
+      # of relying on cargo's own (slower, always-partial) fingerprinting.
+      - name: Resolve lore submodule commit
+        id: lore-sha
+        shell: bash
+        run: echo "sha=$(git -C third_party/lore rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached lore artifact
+        id: lore-artifact-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/lore
+          key: lore-artifact-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cargo_profile }}-${{ steps.lore-sha.outputs.sha }}
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DLORE_CARGO_PROFILE=${{ inputs.cargo_profile }} ${{ inputs.cmake_extra_args }}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Save lore artifact cache
+        if: steps.lore-artifact-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/lore
+          key: lore-artifact-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cargo_profile }}-${{ steps.lore-sha.outputs.sha }}
+
+      # Filename-agnostic: single-arch macOS output isn't named the same as
+      # the "universal" release artifact, so just confirm something staged.
+      - name: Verify staged artifacts exist
+        shell: bash
+        run: |
+          ls -la "${{ inputs.platform_dir }}"
+          test -n "$(find "${{ inputs.platform_dir }}" -maxdepth 1 -iname 'godot-lore-plugin*' -print -quit)"
+          test -n "$(find "${{ inputs.platform_dir }}" -maxdepth 1 \( -iname 'lore.dll' -o -iname 'liblore.*' \) -print -quit)"
+
+      - name: Upload build artifact
+        if: inputs.upload_artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.platform_dir }}
