@@ -23,7 +23,7 @@ on:
         required: true
         type: string
       rust_targets:
-        description: Extra Rust targets to install (space-separated), beyond the host default
+        description: Extra Rust targets to install (comma-separated, per dtolnay/rust-toolchain), beyond the host default
         required: false
         type: string
         default: ""

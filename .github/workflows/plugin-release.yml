@@ -1,0 +1,91 @@
+name: Release plugin package
+
+# Builds the real shippable cross-platform release artifact via the reusable
+# per-platform build workflow (plugin-build-platform.yml) — release-lto
+# profile, genuine dual-arch/universal macOS binary, no CI-speed shortcuts —
+# and uploads each platform's output as a workflow artifact for the
+# merge/package/publish steps that follow.
+#
+# Two triggers, one pipeline:
+#   - push of a vX.Y.Z tag: a real release.
+#   - workflow_dispatch: a disposable dry run, used to validate this whole
+#     pipeline without cutting a real tag. Manual runs must supply a version
+#     with a SemVer pre-release/RC suffix (e.g. v0.3.0-rc1) so a disposable
+#     test run can never be mistaken for a real release version.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, e.g. v0.3.0-rc1. Must include a SemVer pre-release/RC suffix (-rc1, -beta.1, ...)."
+        required: true
+        type: string
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve and validate version
+        id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+            if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+              echo "::error::Manual dispatch requires a version with a SemVer pre-release/RC suffix (e.g. v0.3.0-rc1) to keep disposable test runs distinct from real releases. Got: '$version'"
+              exit 1
+            fi
+          else
+            version="${{ github.ref_name }}"
+          fi
+          echo "Resolved release version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform_dir: addons/godot-lore-plugin/windows
+            rust_targets: ""
+            cmake_extra_args: ""
+            timeout_minutes: 90
+            artifact_name: windows
+          - os: ubuntu-latest
+            platform_dir: addons/godot-lore-plugin/linux
+            rust_targets: ""
+            cmake_extra_args: ""
+            timeout_minutes: 90
+            artifact_name: linux
+          - os: macos-latest
+            platform_dir: addons/godot-lore-plugin/macos
+            # No CMAKE_OSX_ARCHITECTURES override: CMakeLists.txt defaults to
+            # "x86_64;arm64", which is a real universal build (see its
+            # LORE_DUAL_ARCH handling) - unlike plugin-build.yml's CI
+            # validation matrix, which forces arm64-only for speed. Both
+            # Darwin targets must be installed for cargo to build each slice
+            # lipo then merges.
+            rust_targets: "x86_64-apple-darwin,aarch64-apple-darwin"
+            cmake_extra_args: ""
+            # Dual-arch release-lto easily exceeds CI validation's 60-minute
+            # budget; no real number is on record yet for this repo, so
+            # start generous and tune down once a real run's timing is known.
+            timeout_minutes: 150
+            artifact_name: macos
+    uses: ./.github/workflows/plugin-build-platform.yml
+    with:
+      os: ${{ matrix.os }}
+      platform_dir: ${{ matrix.platform_dir }}
+      cargo_profile: release-lto
+      rust_targets: ${{ matrix.rust_targets }}
+      cmake_extra_args: ${{ matrix.cmake_extra_args }}
+      timeout_minutes: ${{ matrix.timeout_minutes }}
+      upload_artifact: true
+      artifact_name: ${{ matrix.artifact_name }}
