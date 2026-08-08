@@ -136,13 +136,26 @@ jobs:
           path: addons/godot-lore-plugin
 
       # Same shared per-platform check plugin-build-platform.yml uses
-      # (scripts/verify-platform-package.sh), extended to the whole
-      # assembled tree.
+      # (scripts/verify-platform-package.sh). Platform directories are
+      # discovered from what the download step above actually populated
+      # (one per platform, matching the build job's matrix artifact_name
+      # entries) rather than re-listing windows/linux/macos by hand a
+      # second time. The count check preserves the existing "fail loudly if
+      # a platform is missing" guarantee even though the names themselves
+      # are no longer enumerated here.
       - name: Verify assembled package
         shell: bash
         run: |
           set -euo pipefail
-          for platform_dir in addons/godot-lore-plugin/windows addons/godot-lore-plugin/linux addons/godot-lore-plugin/macos; do
+          shopt -s nullglob
+          platform_dirs=(addons/godot-lore-plugin/*/)
+          expected_platform_count=3
+          if [ "${#platform_dirs[@]}" -ne "$expected_platform_count" ]; then
+            echo "::error::Expected $expected_platform_count platform directories under addons/godot-lore-plugin/, found ${#platform_dirs[@]}: ${platform_dirs[*]}"
+            exit 1
+          fi
+          for platform_dir in "${platform_dirs[@]}"; do
+            platform_dir="${platform_dir%/}"
             echo "Checking $platform_dir"
             ls -la "$platform_dir"
             bash scripts/verify-platform-package.sh "$platform_dir"
