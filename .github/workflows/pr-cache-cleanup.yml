@@ -1,0 +1,58 @@
+name: Clean up closed PR caches
+
+# Deletes caches scoped to a closed PR's refs/pull/<N>/merge ref. Nothing
+# else does this: GitHub has no automatic cache cleanup on branch/PR/tag
+# deletion for any ref type - only two backstops exist (7-day-unused
+# eviction, and LRU eviction once the repo's 10GB cache cap is hit), both
+# blind to which caches are actually dead weight.
+#
+# Runs on a schedule rather than pull_request/pull_request_target: a
+# pull_request-triggered job gets a read-only GITHUB_TOKEN for fork PRs, so
+# it can't delete their caches; pull_request_target fixes that but hands
+# full base-repo token access to an event any external contributor can
+# trigger at will. A scheduled sweep needs neither - it checks PR state
+# itself via a plain read call, so there's no elevated-trust trigger to
+# reason about at all.
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Delete caches for closed PRs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t refs < <(
+            gh cache list --repo "${{ github.repository }}" --limit 100 \
+              --json ref --jq '.[].ref' | sort -u
+          )
+
+          deleted_any=false
+          for ref in "${refs[@]}"; do
+            if [[ "$ref" =~ ^refs/pull/([0-9]+)/merge$ ]]; then
+              pr_number="${BASH_REMATCH[1]}"
+              state=$(gh pr view "$pr_number" --repo "${{ github.repository }}" --json state --jq .state)
+              if [ "$state" != "OPEN" ]; then
+                echo "Deleting caches for closed PR #$pr_number ($ref, state=$state)"
+                gh cache delete --all --ref "$ref" \
+                  --repo "${{ github.repository }}" \
+                  --succeed-on-no-caches
+                deleted_any=true
+              fi
+            fi
+          done
+
+          if [ "$deleted_any" = false ]; then
+            echo "No closed-PR-scoped caches found."
+          fi

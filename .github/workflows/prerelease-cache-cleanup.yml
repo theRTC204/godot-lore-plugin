@@ -1,0 +1,62 @@
+name: Clean up pre-release tag caches
+
+# Sweeps caches scoped to disposable pre-release/RC tags (e.g. v0.3.0-rc1)
+# - the workflow_dispatch dry-run seam plugin-release.yml documents.
+# Deleting the tag itself does NOT clear its cache (confirmed by hand for
+# v0.3.0-rc1); GitHub has no automatic cache cleanup on branch/PR/tag
+# deletion for any ref type, same as pr-cache-cleanup.yml.
+#
+# Matches pre-release/RC tags only, via the same SemVer suffix pattern
+# plugin-release.yml's resolve-version job uses - a real vX.Y.Z release
+# tag's cache is never swept. Matches both observed ref shapes:
+# refs/tags/vX.Y.Z-rcN (a real tag push) and refs/heads/refs/tags/vX.Y.Z-rcN
+# (seen from a workflow_dispatch run pointed at a tag ref via --ref).
+#
+# Weekly, not per-push: these caches only accumulate from occasional manual
+# dry-run validation.
+
+on:
+  schedule:
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete caches for pre-release/RC tag refs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Same pattern as plugin-release.yml's resolve-version job.
+          semver_prerelease_re='^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z][0-9A-Za-z.-]*$'
+
+          # 100 comfortably covers this repo's cache count; the 10GB cap
+          # bounds it well below that regardless.
+          mapfile -t refs < <(
+            gh cache list --repo "${{ github.repository }}" --limit 100 \
+              --json ref --jq '.[].ref' | sort -u
+          )
+
+          deleted_any=false
+          for ref in "${refs[@]}"; do
+            tag_name="${ref#refs/tags/}"
+            tag_name="${tag_name#refs/heads/refs/tags/}"
+            if { [[ "$ref" == refs/tags/* ]] || [[ "$ref" == refs/heads/refs/tags/* ]]; } \
+              && [[ "$tag_name" =~ $semver_prerelease_re ]]; then
+              echo "Deleting caches for pre-release tag ref: $ref"
+              gh cache delete --all --ref "$ref" \
+                --repo "${{ github.repository }}" \
+                --succeed-on-no-caches
+              deleted_any=true
+            fi
+          done
+
+          if [ "$deleted_any" = false ]; then
+            echo "No pre-release/RC tag-scoped caches found."
+          fi
