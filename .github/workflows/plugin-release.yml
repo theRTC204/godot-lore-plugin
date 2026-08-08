@@ -89,3 +89,65 @@ jobs:
       timeout_minutes: ${{ matrix.timeout_minutes }}
       upload_artifact: true
       artifact_name: ${{ matrix.artifact_name }}
+
+  package:
+    # needs: build waits for every matrix leg; if any platform failed, this
+    # job is skipped entirely rather than assembling a zip that's silently
+    # missing a platform. No if: always() override - that's deliberate.
+    needs: [resolve-version, build]
+    runs-on: ubuntu-latest
+    outputs:
+      zip_name: ${{ steps.zip.outputs.zip_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # LICENSE/THIRDPARTY.md live at the repo root; CMakeLists.txt mirrors
+      # them into addons/godot-lore-plugin/ as a local post-build step, but
+      # that copy is gitignored (a build byproduct, not committed there), so
+      # a fresh checkout alone doesn't produce them at the path that ships.
+      - name: Copy root LICENSE/THIRDPARTY.md into the addon folder
+        run: cp LICENSE THIRDPARTY.md addons/godot-lore-plugin/
+
+      # No name/pattern: downloads every artifact from this run (just the
+      # three platform builds at this point), each into its own directory
+      # named after the artifact - windows/linux/macos, matching the
+      # subfolder layout godot-lore-plugin.gdextension expects exactly.
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: addons/godot-lore-plugin
+
+      # Same filename-agnostic style as plugin-build-platform.yml's own
+      # per-platform check, extended to the whole assembled tree.
+      - name: Verify assembled package
+        shell: bash
+        run: |
+          set -euo pipefail
+          for platform_dir in addons/godot-lore-plugin/windows addons/godot-lore-plugin/linux addons/godot-lore-plugin/macos; do
+            echo "Checking $platform_dir"
+            ls -la "$platform_dir"
+            test -n "$(find "$platform_dir" -maxdepth 1 -iname 'godot-lore-plugin*' -print -quit)"
+            test -n "$(find "$platform_dir" -maxdepth 1 \( -iname 'lore.dll' -o -iname 'liblore.*' \) -print -quit)"
+          done
+          test -f addons/godot-lore-plugin/godot-lore-plugin.gdextension
+          test -f addons/godot-lore-plugin/LICENSE
+          test -f addons/godot-lore-plugin/THIRDPARTY.md
+
+      # addons/ prefix baked into the zip (not just godot-lore-plugin/) so
+      # extracting at a project's root drops it straight into addons/.
+      - name: Zip release package
+        id: zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve-version.outputs.version }}"
+          zip_name="godot-lore-plugin-${version}.zip"
+          zip -r "$zip_name" addons/godot-lore-plugin
+          echo "zip_name=$zip_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.zip_name }}
+          path: ${{ steps.zip.outputs.zip_name }}
