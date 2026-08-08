@@ -99,14 +99,13 @@ jobs:
           path: build/lore
           key: lore-artifact-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cargo_profile }}-${{ steps.lore-sha.outputs.sha }}
 
-      # Filename-agnostic: single-arch macOS output isn't named the same as
-      # the "universal" release artifact, so just confirm something staged.
+      # See scripts/verify-platform-package.sh for what "valid" means here
+      # and why the checks are filename-agnostic.
       - name: Verify staged artifacts exist
         shell: bash
         run: |
           ls -la "${{ inputs.platform_dir }}"
-          test -n "$(find "${{ inputs.platform_dir }}" -maxdepth 1 -iname 'godot-lore-plugin*' -print -quit)"
-          test -n "$(find "${{ inputs.platform_dir }}" -maxdepth 1 \( -iname 'lore.dll' -o -iname 'liblore.*' \) -print -quit)"
+          bash scripts/verify-platform-package.sh "${{ inputs.platform_dir }}"
 
       - name: Upload build artifact
         if: inputs.upload_artifact

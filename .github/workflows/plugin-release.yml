@@ -118,8 +118,9 @@ jobs:
         with:
           path: addons/godot-lore-plugin
 
-      # Same filename-agnostic style as plugin-build-platform.yml's own
-      # per-platform check, extended to the whole assembled tree.
+      # Same shared per-platform check plugin-build-platform.yml uses
+      # (scripts/verify-platform-package.sh), extended to the whole
+      # assembled tree.
       - name: Verify assembled package
         shell: bash
         run: |
@@ -127,8 +128,7 @@ jobs:
           for platform_dir in addons/godot-lore-plugin/windows addons/godot-lore-plugin/linux addons/godot-lore-plugin/macos; do
             echo "Checking $platform_dir"
             ls -la "$platform_dir"
-            test -n "$(find "$platform_dir" -maxdepth 1 -iname 'godot-lore-plugin*' -print -quit)"
-            test -n "$(find "$platform_dir" -maxdepth 1 \( -iname 'lore.dll' -o -iname 'liblore.*' \) -print -quit)"
+            bash scripts/verify-platform-package.sh "$platform_dir"
           done
           test -f addons/godot-lore-plugin/godot-lore-plugin.gdextension
           test -f addons/godot-lore-plugin/LICENSE
