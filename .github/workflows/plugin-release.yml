@@ -89,10 +89,20 @@ jobs:
             # lipo then merges.
             rust_targets: "x86_64-apple-darwin,aarch64-apple-darwin"
             cmake_extra_args: ""
-            # Dual-arch release-lto easily exceeds CI validation's 60-minute
-            # budget; no real number is on record yet for this repo, so
-            # start generous and tune down once a real run's timing is known.
-            timeout_minutes: 150
+            # Cold-cache (no prior release-lto cache entry for this Lore SHA
+            # on this git ref) is the case that matters: GitHub Actions cache
+            # scoping is per-ref, and main never populates a release-lto
+            # entry (its CI validation build uses the fast `release` profile
+            # only), so every real vX.Y.Z tag push starts cold here, not just
+            # the first release after a Lore submodule bump. Two observed
+            # cold-cache runs, both spent almost entirely in the single
+            # "Build" step: rc1 1h48m24s, rc2 2h0m42s. 180 min leaves ~1h
+            # (~50%) margin over the worst of those two, versus ~29 min
+            # (~24%) at the previous 150 - enough cushion for the known
+            # variance of shared macOS hosted runners without being
+            # arbitrarily large. Re-tune if a real cold-cache release run
+            # comes in meaningfully over ~2h.
+            timeout_minutes: 180
             artifact_name: macos
     uses: ./.github/workflows/plugin-build-platform.yml
     with:
