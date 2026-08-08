@@ -96,6 +96,8 @@ jobs:
     # missing a platform. No if: always() override - that's deliberate.
     needs: [resolve-version, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       zip_name: ${{ steps.zip.outputs.zip_name }}
     steps:
@@ -151,3 +153,22 @@ jobs:
         with:
           name: ${{ steps.zip.outputs.zip_name }}
           path: ${{ steps.zip.outputs.zip_name }}
+
+      # --target pins the release to the exact commit this run built (the
+      # tag itself doesn't exist yet for a workflow_dispatch RC run), rather
+      # than defaulting to the tip of the default branch. --draft leaves the
+      # human-review checkpoint in place; --generate-notes uses GitHub's
+      # auto-generated notes per the spec, no hand-authored body required.
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve-version.outputs.version }}"
+          zip_name="${{ steps.zip.outputs.zip_name }}"
+          gh release create "$version" "$zip_name" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "$version" \
+            --draft \
+            --generate-notes
