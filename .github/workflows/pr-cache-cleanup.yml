@@ -1,18 +1,20 @@
-name: Clean up closed PR caches
+name: Clean up closed PR and deleted branch caches
 
-# Deletes caches scoped to a closed PR's refs/pull/<N>/merge ref. Nothing
-# else does this: GitHub has no automatic cache cleanup on branch/PR/tag
-# deletion for any ref type - only two backstops exist (7-day-unused
-# eviction, and LRU eviction once the repo's 10GB cache cap is hit), both
-# blind to which caches are actually dead weight.
+# Deletes caches scoped to a closed PR's refs/pull/<N>/merge ref, or to a
+# refs/heads/<branch> whose branch no longer exists (e.g. a feature branch
+# after its PR merges and it gets deleted). Nothing else does this: GitHub
+# has no automatic cache cleanup on branch/PR/tag deletion for any ref type
+# - only two backstops exist (7-day-unused eviction, and LRU eviction once
+# the repo's 10GB cache cap is hit), both blind to which caches are
+# actually dead weight.
 #
 # Runs on a schedule rather than pull_request/pull_request_target: a
 # pull_request-triggered job gets a read-only GITHUB_TOKEN for fork PRs, so
 # it can't delete their caches; pull_request_target fixes that but hands
 # full base-repo token access to an event any external contributor can
-# trigger at will. A scheduled sweep needs neither - it checks PR state
-# itself via a plain read call, so there's no elevated-trust trigger to
-# reason about at all.
+# trigger at will. A scheduled sweep needs neither - it checks PR/branch
+# state itself via plain read calls, so there's no elevated-trust trigger
+# to reason about at all.
 
 on:
   schedule:
@@ -20,7 +22,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  cleanup:
+  cleanup-prs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -55,4 +57,47 @@ jobs:
 
           if [ "$deleted_any" = false ]; then
             echo "No closed-PR-scoped caches found."
+          fi
+
+  cleanup-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete caches for deleted branches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t refs < <(
+            gh cache list --repo "${{ github.repository }}" --limit 100 \
+              --json ref --jq '.[].ref' | sort -u
+          )
+
+          deleted_any=false
+          for ref in "${refs[@]}"; do
+            # refs/heads/refs/tags/... is prerelease-cache-cleanup.yml's
+            # territory (the workflow_dispatch-against-a-tag-ref quirk it
+            # documents) - skip it here so this job never treats a
+            # protected release-tag cache as a "deleted branch".
+            if [[ "$ref" == refs/heads/refs/tags/* ]]; then
+              continue
+            fi
+            if [[ "$ref" =~ ^refs/heads/(.+)$ ]]; then
+              branch_name="${BASH_REMATCH[1]}"
+              if ! gh api "repos/${{ github.repository }}/branches/$branch_name" --silent 2>/dev/null; then
+                echo "Deleting caches for deleted branch: $branch_name ($ref)"
+                gh cache delete --all --ref "$ref" \
+                  --repo "${{ github.repository }}" \
+                  --succeed-on-no-caches
+                deleted_any=true
+              fi
+            fi
+          done
+
+          if [ "$deleted_any" = false ]; then
+            echo "No deleted-branch-scoped caches found."
           fi
