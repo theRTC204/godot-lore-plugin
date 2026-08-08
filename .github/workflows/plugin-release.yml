@@ -29,22 +29,37 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.resolve.outputs.version }}
+      is_prerelease: ${{ steps.resolve.outputs.is_prerelease }}
     steps:
       - name: Resolve and validate version
         id: resolve
         shell: bash
         run: |
+          # Same SemVer pre-release/RC suffix shape used both to validate
+          # workflow_dispatch input and to decide the release's "Pre-release"
+          # flag below - a version has this shape if and only if it should
+          # be marked prerelease.
+          semver_prerelease_re='^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z][0-9A-Za-z.-]*$'
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             version="${{ inputs.version }}"
-            if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+            if ! [[ "$version" =~ $semver_prerelease_re ]]; then
               echo "::error::Manual dispatch requires a version with a SemVer pre-release/RC suffix (e.g. v0.3.0-rc1) to keep disposable test runs distinct from real releases. Got: '$version'"
               exit 1
             fi
           else
             version="${{ github.ref_name }}"
           fi
-          echo "Resolved release version: $version"
+
+          if [[ "$version" =~ $semver_prerelease_re ]]; then
+            is_prerelease=true
+          else
+            is_prerelease=false
+          fi
+
+          echo "Resolved release version: $version (prerelease: $is_prerelease)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
 
   build:
     needs: resolve-version
@@ -166,9 +181,14 @@ jobs:
           set -euo pipefail
           version="${{ needs.resolve-version.outputs.version }}"
           zip_name="${{ steps.zip.outputs.zip_name }}"
+          prerelease_flag=()
+          if [ "${{ needs.resolve-version.outputs.is_prerelease }}" = "true" ]; then
+            prerelease_flag+=(--prerelease)
+          fi
           gh release create "$version" "$zip_name" \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "$version" \
             --draft \
-            --generate-notes
+            --generate-notes \
+            "${prerelease_flag[@]}"
