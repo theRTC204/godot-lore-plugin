@@ -101,7 +101,9 @@ jobs:
             # (~24%) at the previous 150 - enough cushion for the known
             # variance of shared macOS hosted runners without being
             # arbitrarily large. Re-tune if a real cold-cache release run
-            # comes in meaningfully over ~2h.
+            # comes in meaningfully over ~2h. Keep rust_targets/
+            # timeout_minutes here in sync with warm-release-cache.yml's
+            # macos entry by hand - see that file's comment for why.
             timeout_minutes: 180
             artifact_name: macos
     uses: ./.github/workflows/plugin-build-platform.yml

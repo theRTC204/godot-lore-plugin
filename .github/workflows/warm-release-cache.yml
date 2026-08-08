@@ -1,0 +1,79 @@
+name: Warm release-lto lore cache
+
+# Populates the lore-artifact-<os>-<arch>-release-lto-<lore-sha> cache
+# (see plugin-build-platform.yml's "Restore/Save cached lore artifact"
+# steps) on main's cache scope, specifically so plugin-release.yml's real
+# release builds don't cold-start.
+#
+# actions/cache only restores a cache from the current ref, a PR's base
+# branch, or the repo's *default* branch - never from another branch or
+# tag's scope. Every real release is a `vX.Y.Z` tag push, and every such
+# tag is its own brand-new ref, so it can never inherit a release-lto
+# cache entry saved by a previous tag or by a workflow_dispatch dry run.
+# The default branch is the one scope every other ref can fall back to,
+# so this workflow's whole job is to make sure that scope has a hot entry
+# for the current Lore SHA before a release ever needs it.
+#
+# This narrows, but doesn't eliminate, the cold-cache case: it only helps
+# a release tag whose Lore SHA matches what main last warmed (true for
+# the normal "cut a release from current main" flow). A release cut
+# before this job has run for the current Lore SHA, or from a Lore SHA
+# that never landed on main, still cold-starts - plugin-release.yml's
+# timeout_minutes stays sized for that case regardless.
+#
+# Path-filtered to third_party/lore, rather than running on every push to
+# main: the cache key depends only on the Lore submodule's commit SHA and
+# the cargo profile, so a run triggered by anything else would just
+# restore-hit its own unchanged key and do nothing useful. Also filtered
+# on this workflow and plugin-build-platform.yml themselves (matching
+# plugin-build.yml's self-referential convention) so an edit to either
+# gets exercised immediately rather than waiting for the next Lore bump.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - third_party/lore
+      - .github/workflows/warm-release-cache.yml
+      - .github/workflows/plugin-build-platform.yml
+  workflow_dispatch:
+
+jobs:
+  warm:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform_dir: addons/godot-lore-plugin/windows
+            rust_targets: ""
+            cmake_extra_args: ""
+            timeout_minutes: 90
+          - os: ubuntu-latest
+            platform_dir: addons/godot-lore-plugin/linux
+            rust_targets: ""
+            cmake_extra_args: ""
+            timeout_minutes: 90
+          - os: macos-latest
+            platform_dir: addons/godot-lore-plugin/macos
+            # Real dual-arch/universal build, matching plugin-release.yml
+            # exactly - a cache built from the CI-validation matrix's
+            # arm64-only override would be a different, useless cache key
+            # for the release leg's purposes anyway (runner.arch doesn't
+            # vary by target arch, but the artifact under build/lore would
+            # be the wrong shape). Keep rust_targets/timeout_minutes here
+            # in sync with plugin-release.yml's macos entry by hand - no
+            # single source feeds both (unlike plugin-release.yml's own
+            # platform-directory glob in its package job, which only
+            # dedups within that one job/file).
+            rust_targets: "x86_64-apple-darwin,aarch64-apple-darwin"
+            cmake_extra_args: ""
+            timeout_minutes: 180
+    uses: ./.github/workflows/plugin-build-platform.yml
+    with:
+      os: ${{ matrix.os }}
+      platform_dir: ${{ matrix.platform_dir }}
+      cargo_profile: release-lto
+      rust_targets: ${{ matrix.rust_targets }}
+      cmake_extra_args: ${{ matrix.cmake_extra_args }}
+      timeout_minutes: ${{ matrix.timeout_minutes }}
