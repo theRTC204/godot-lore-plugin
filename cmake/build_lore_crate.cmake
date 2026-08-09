@@ -74,6 +74,19 @@ else()
     if(NOT LORE_CARGO_RESULT EQUAL 0)
         message(FATAL_ERROR "cargo build failed")
     endif()
+
+    if(UNIX AND NOT APPLE)
+        # Only the Windows/macOS Rust targets set split-debuginfo in
+        # third_party/lore's .cargo/config.toml, so the generic Linux
+        # build ships full embedded DWARF unless stripped here.
+        execute_process(
+            COMMAND strip --strip-debug "${LORE_CARGO_OUT_DIR}/${LORE_SHARED_LIB_NAME}"
+            RESULT_VARIABLE LORE_STRIP_RESULT
+        )
+        if(NOT LORE_STRIP_RESULT EQUAL 0)
+            message(FATAL_ERROR "strip failed")
+        endif()
+    endif()
 endif()
 
 execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_if_different
