@@ -86,6 +86,21 @@ else()
         if(NOT LORE_STRIP_RESULT EQUAL 0)
             message(FATAL_ERROR "strip failed")
         endif()
+
+        # rustc's cdylib has no embedded DT_SONAME on Linux (macOS gets the
+        # equivalent -install_name via third_party/lore's build.rs, upstream
+        # Epic code we can't patch). Without it, consumers linking by path
+        # bake that literal path into their own DT_NEEDED, which skips
+        # RPATH resolution at load time. Patch the soname in directly.
+        find_program(PATCHELF_EXECUTABLE patchelf REQUIRED)
+        execute_process(
+            COMMAND "${PATCHELF_EXECUTABLE}" --set-soname "${LORE_SHARED_LIB_NAME}"
+                "${LORE_CARGO_OUT_DIR}/${LORE_SHARED_LIB_NAME}"
+            RESULT_VARIABLE LORE_PATCHELF_RESULT
+        )
+        if(NOT LORE_PATCHELF_RESULT EQUAL 0)
+            message(FATAL_ERROR "patchelf --set-soname failed")
+        endif()
     endif()
 endif()
 

@@ -121,16 +121,6 @@ set_target_properties(
 )
 if(WIN32)
     set_target_properties(lore PROPERTIES IMPORTED_IMPLIB "${LORE_STAGE_DIR}/lib/lore.dll.lib")
-elseif(UNIX AND NOT APPLE)
-    # cargo's cdylib has no embedded DT_SONAME on Linux, so without this,
-    # CMake links godot-lore-plugin against lore's raw IMPORTED_LOCATION
-    # path, and that path (containing a slash) ends up baked into
-    # DT_NEEDED verbatim — which skips RPATH resolution entirely and
-    # breaks the load outside the build dir. This makes CMake link by
-    # bare name instead, so DT_NEEDED is plain "liblore.so" and $ORIGIN
-    # resolves it. (macOS sets its dylib's install name directly in
-    # third_party/lore/lore/build.rs instead; IMPORTED_SONAME is a no-op there.)
-    set_target_properties(lore PROPERTIES IMPORTED_SONAME "${LORE_SHARED_LIB_NAME}")
 endif()
 add_dependencies(lore lore_cargo_build)
 
@@ -174,12 +164,23 @@ get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
 
 set(GODOT_LORE_PLUGIN_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/addons/godot-lore-plugin/${GODOT_LORE_PLUGIN_PLATFORM_DIR}")
 
+# CMake's automatic rpath (BUILD_RPATH_USE_ORIGIN) points at lore's
+# build-tree location (IMPORTED_LOCATION), not where the POST_BUILD copy
+# below actually puts it — producing a build-relative RPATH on Linux and an
+# absolute CI-runner path on macOS, neither of which survive shipping. Set
+# it explicitly to just "look next to me" instead.
+if(APPLE)
+    set(GODOT_LORE_PLUGIN_BUILD_RPATH "@loader_path")
+elseif(UNIX)
+    set(GODOT_LORE_PLUGIN_BUILD_RPATH "$ORIGIN")
+endif()
+
 # gersemi: off
 set_target_properties(
     godot-lore-plugin
     PROPERTIES
         POSITION_INDEPENDENT_CODE ON
-        BUILD_RPATH_USE_ORIGIN ON
+        BUILD_RPATH "${GODOT_LORE_PLUGIN_BUILD_RPATH}"
 
         LINK_SEARCH_START_STATIC ON
         LINK_SEARCH_END_STATIC ON
