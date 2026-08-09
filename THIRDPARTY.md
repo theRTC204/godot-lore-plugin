@@ -1,6 +1,6 @@
 # Third-party licenses
 
-This addon statically links [godot-cpp](https://github.com/godotengine/godot-cpp) into `godot-lore-plugin.windows.editor.x86_64.dll`, and ships [Lore](https://github.com/EpicGames/lore)'s compiled client library as `lore.dll`, a runtime dependency loaded alongside it. Both are MIT-licensed; their license texts are reproduced below in full, as required by that license.
+This addon statically links [godot-cpp](https://github.com/godotengine/godot-cpp) into its own shared library (`godot-lore-plugin.windows.editor.x86_64.dll` on Windows, `godot-lore-plugin.linux.editor.x86_64.so` on Linux, `godot-lore-plugin.macos.editor.universal.dylib` on macOS), and ships [Lore](https://github.com/EpicGames/lore)'s compiled client library (`lore.dll` / `liblore.so` / `liblore.dylib`, respectively) as a runtime dependency loaded alongside it. Both are MIT-licensed; their license texts are reproduced below in full, as required by that license.
 
 ## godotengine/godot-cpp
 

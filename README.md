@@ -4,7 +4,7 @@
 
 An in-editor Godot GDExtension bringing native support for Epic Games' [Lore](https://epicgames.github.io/lore/) source control system, mirroring the UX of Godot's built-in Git integration (the first-party `godot-git-plugin`).
 
-The plugin subclasses Godot's `EditorVCSInterface` and drives it via Lore's C API (`lore-capi`/`lore.h`), built from a pinned `third_party/lore` submodule checkout. Lore is linked dynamically (`lore.dll` + a small import lib), not statically: the raw staticlib archive `cargo`/`cbindgen` also produce is unlinked and runs into the hundreds of MB to multiple GB (no dead-code elimination happens until something actually links against it), whereas the `cdylib` build is already linked and stripped down to ~30MB. `lore.dll` ships alongside the extension's own DLL as a genuine runtime dependency.
+The plugin subclasses Godot's `EditorVCSInterface` and drives it via Lore's C API (`lore-capi`/`lore.h`), built from a pinned `third_party/lore` submodule checkout. Lore is linked dynamically, not statically: the raw staticlib archive `cargo`/`cbindgen` also produce is unlinked and runs into the hundreds of MB to multiple GB (no dead-code elimination happens until something actually links against it), whereas the `cdylib` build is already linked and stripped down to a few dozen MB. Lore's shared library — `lore.dll` (+ a small import lib) on Windows, `liblore.so` on Linux, `liblore.dylib` on macOS — ships alongside the extension's own shared library as a genuine runtime dependency.
 
 ## Repository layout
 
@@ -21,7 +21,7 @@ addons/godot-lore-plugin/       Standard Godot addon layout (this is what would 
 
 ## Installing the addon
 
-1. Copy the `addons/godot-lore-plugin/` folder into your Godot project's `addons/` directory (Windows only for now).
+1. Copy the `addons/godot-lore-plugin/` folder into your Godot project's `addons/` directory. Prebuilt binaries for Windows, Linux, and macOS (universal x86_64/arm64) all ship in the same folder — Godot picks the right one for the running platform via `godot-lore-plugin.gdextension`.
 2. Make sure a Lore repository (a `.lore` folder) exists at your **project's root directory** — the same folder as `project.godot`. Lore doesn't search upward for `.lore` the way Git searches for `.git`, so it has to be exactly there.
 3. In the editor: **Project → Version Control → Version Control Settings...**, select **LoreVCSPlugin**, and connect.
 
@@ -46,20 +46,26 @@ These aren't bugs — they're either genuine gaps in what Lore's API offers vers
 ## Prerequisites
 
 - CMake 3.19+
-- An MSVC toolchain (Visual Studio Build Tools) — Windows is the only supported platform for now
+- A native C++ toolchain for your platform: MSVC (Visual Studio Build Tools) on Windows, GCC or Clang on Linux, or the Xcode Command Line Tools (Clang) on macOS
 - A Godot 4.3+ editor binary and a project to load the addon into, so the extension is tested against the exact `EditorVCSInterface` API surface it was built for (see "Testing" below)
-- Rust + Cargo — CMake builds Lore's C API from the `third_party/lore` submodule as part of the build; the first build needs network access to fetch its crate dependencies
+- Rust + Cargo — CMake builds Lore's C API from the `third_party/lore` submodule as part of the build; the first build needs network access to fetch its crate dependencies. On macOS, also install both Darwin targets (`rustup target add x86_64-apple-darwin aarch64-apple-darwin`): by default the build produces a genuine universal binary (see "Building" below), and cargo only ever builds for one target at a time.
 
 ## Building
 
-```powershell
+```
 git submodule update --init --recursive
 
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-This produces `addons/godot-lore-plugin/bin/godot-lore-plugin.windows.editor.x86_64.dll` (referenced by `addons/godot-lore-plugin/godot-lore-plugin.gdextension`) plus a copy of `lore.dll` alongside it, since the extension DLL depends on it at load time. Along the way, CMake builds `lore.dll`/`lore.dll.lib`/`lore.h` from `third_party/lore` via `cargo` and stages them under `build/lore/` — there's no separate step for this.
+These commands are the same on every platform. They produce a per-platform subfolder under `addons/godot-lore-plugin/` (referenced by `addons/godot-lore-plugin/godot-lore-plugin.gdextension`), plus a copy of Lore's shared library alongside the extension binary, since the extension depends on it at load time:
+
+- Windows: `addons/godot-lore-plugin/windows/godot-lore-plugin.windows.editor.x86_64.dll` + `lore.dll`
+- Linux: `addons/godot-lore-plugin/linux/godot-lore-plugin.linux.editor.x86_64.so` + `liblore.so`
+- macOS: `addons/godot-lore-plugin/macos/godot-lore-plugin.macos.editor.universal.dylib` + `liblore.dylib` — a genuine universal (x86_64 + arm64) binary by default; CMake builds the Lore crate once per architecture via `cargo` and merges the results with `lipo`
+
+Along the way, CMake builds Lore's shared library (plus header, plus, on Windows, a `.lib` import library) from `third_party/lore` via `cargo` and stages them under `build/lore/` — there's no separate step for this.
 
 Building regenerates a handful of files tracked inside `third_party/lore` itself (codegen'd proto bindings, `lore-capi/lore.h`), so `git status` may show the submodule as having local modifications after a build. These are build byproducts, not something to commit — `git -C third_party/lore checkout -- .` clears them.
 
@@ -74,7 +80,7 @@ Two levels:
 
 `third_party/lore` is a submodule pinned to a specific Lore commit. To bump it:
 
-```powershell
+```
 git -C third_party/lore fetch
 git -C third_party/lore checkout <ref>
 git add third_party/lore
@@ -86,7 +92,7 @@ The next build picks up the new pin automatically — no separate vendoring step
 
 `third_party/godot-cpp` is a submodule pinned to a specific godot-cpp commit, which should track the Godot editor version the plugin is built against. To bump it:
 
-```powershell
+```
 git -C third_party/godot-cpp fetch
 git -C third_party/godot-cpp checkout <ref>
 git add third_party/godot-cpp
@@ -102,4 +108,4 @@ If you change it, also update `compatibility_minimum` in `addons/godot-lore-plug
 
 ## License
 
-MIT — see `LICENSE`. Bundles [godot-cpp](https://github.com/godotengine/godot-cpp) (statically linked) and [Lore](https://github.com/EpicGames/lore)'s client library (`lore.dll`, loaded at runtime), both also MIT — see `THIRDPARTY.md`.
+MIT — see `LICENSE`. Bundles [godot-cpp](https://github.com/godotengine/godot-cpp) (statically linked) and [Lore](https://github.com/EpicGames/lore)'s client library (`lore.dll` / `liblore.so` / `liblore.dylib`, loaded at runtime), both also MIT — see `THIRDPARTY.md`.
