@@ -164,15 +164,14 @@ get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
 
 set(GODOT_LORE_PLUGIN_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/addons/godot-lore-plugin/${GODOT_LORE_PLUGIN_PLATFORM_DIR}")
 
-# CMake's automatic rpath (BUILD_RPATH_USE_ORIGIN) points at lore's
-# build-tree location (IMPORTED_LOCATION), not where the POST_BUILD copy
-# below actually puts it — producing a build-relative RPATH on Linux and an
-# absolute CI-runner path on macOS, neither of which survive shipping. Set
-# it explicitly to just "look next to me" instead.
+# CMake's automatic rpath points at lore's build-tree location, not where
+# the POST_BUILD copy below actually puts it, and BUILD_RPATH only adds to
+# that rather than replacing it. SKIP_BUILD_RPATH below disables it so the
+# explicit -rpath flag is the only entry: "look next to me".
 if(APPLE)
-    set(GODOT_LORE_PLUGIN_BUILD_RPATH "@loader_path")
+    set(GODOT_LORE_PLUGIN_RPATH_FLAG "-Wl,-rpath,@loader_path")
 elseif(UNIX)
-    set(GODOT_LORE_PLUGIN_BUILD_RPATH "$ORIGIN")
+    set(GODOT_LORE_PLUGIN_RPATH_FLAG "-Wl,-rpath,$ORIGIN")
 endif()
 
 # gersemi: off
@@ -180,7 +179,7 @@ set_target_properties(
     godot-lore-plugin
     PROPERTIES
         POSITION_INDEPENDENT_CODE ON
-        BUILD_RPATH "${GODOT_LORE_PLUGIN_BUILD_RPATH}"
+        SKIP_BUILD_RPATH ON
 
         LINK_SEARCH_START_STATIC ON
         LINK_SEARCH_END_STATIC ON
@@ -193,6 +192,9 @@ set_target_properties(
         OUTPUT_NAME "godot-lore-plugin${GODOTCPP_SUFFIX}"
 )
 # gersemi: on
+if(GODOT_LORE_PLUGIN_RPATH_FLAG)
+    target_link_options(godot-lore-plugin PRIVATE "${GODOT_LORE_PLUGIN_RPATH_FLAG}")
+endif()
 
 # Lore's shared library is a runtime dependency of godot-lore-plugin's own
 # shared library; it must sit next to it for the loader to find it.
