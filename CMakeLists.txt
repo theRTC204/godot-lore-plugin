@@ -121,6 +121,16 @@ set_target_properties(
 )
 if(WIN32)
     set_target_properties(lore PROPERTIES IMPORTED_IMPLIB "${LORE_STAGE_DIR}/lib/lore.dll.lib")
+elseif(UNIX AND NOT APPLE)
+    # cargo's cdylib has no embedded DT_SONAME on Linux, so without this,
+    # CMake links godot-lore-plugin against lore's raw IMPORTED_LOCATION
+    # path, and that path (containing a slash) ends up baked into
+    # DT_NEEDED verbatim — which skips RPATH resolution entirely and
+    # breaks the load outside the build dir. This makes CMake link by
+    # bare name instead, so DT_NEEDED is plain "liblore.so" and $ORIGIN
+    # resolves it. (macOS sets its dylib's install name directly in
+    # third_party/lore/lore/build.rs instead; IMPORTED_SONAME is a no-op there.)
+    set_target_properties(lore PROPERTIES IMPORTED_SONAME "${LORE_SHARED_LIB_NAME}")
 endif()
 add_dependencies(lore lore_cargo_build)
 
