@@ -48,7 +48,7 @@ These aren't bugs — they're either genuine gaps in what Lore's API offers vers
 - CMake 3.19+
 - A native C++ toolchain for your platform: MSVC (Visual Studio Build Tools) on Windows, GCC or Clang on Linux, or the Xcode Command Line Tools (Clang) on macOS
 - A Godot 4.3+ editor binary and a project to load the addon into, so the extension is tested against the exact `EditorVCSInterface` API surface it was built for (see "Testing" below)
-- Rust + Cargo — CMake builds Lore's C API from the `third_party/lore` submodule as part of the build; the first build needs network access to fetch its crate dependencies. On macOS, also install both Darwin targets (`rustup target add x86_64-apple-darwin aarch64-apple-darwin`): by default the build produces a genuine universal binary (see "Building" below), and cargo only ever builds for one target at a time.
+- Rust + Cargo (rustc 1.91 or newer — Lore's crate dependencies require it, and an older toolchain fails mid-build with a raw `cargo` MSRV error; `rustup update stable` gets you there) — CMake builds Lore's C API from the `third_party/lore` submodule as part of the build; the first build needs network access to fetch its crate dependencies. On macOS, also install both Darwin targets (`rustup target add x86_64-apple-darwin aarch64-apple-darwin`): by default the build produces a genuine universal binary (see "Building" below), and cargo only ever builds for one target at a time.
 
 ## Building
 
