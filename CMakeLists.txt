@@ -147,11 +147,31 @@ add_library(godot-lore-plugin SHARED
 
 target_link_libraries(godot-lore-plugin PRIVATE godot-cpp lore_ffi)
 
+# CMake's automatic rpath points at lore's build-tree location, not where
+# the POST_BUILD copies below actually put it, and BUILD_RPATH only adds to
+# that rather than replacing it. SKIP_BUILD_RPATH on each target disables it
+# so the explicit -rpath flag is the only entry: "look next to me". Both
+# consumers of liblore need this — the extension library AND the test binary,
+# each of which gets a copy of liblore placed beside it.
+if(APPLE)
+    set(GODOT_LORE_PLUGIN_RPATH_FLAG "-Wl,-rpath,@loader_path")
+elseif(UNIX)
+    set(GODOT_LORE_PLUGIN_RPATH_FLAG "-Wl,-rpath,$ORIGIN")
+endif()
+
 option(GODOT_LORE_PLUGIN_BUILD_FFI_TEST "Build the standalone lore_ffi test binary (no Godot involved)" ON)
 if(GODOT_LORE_PLUGIN_BUILD_FFI_TEST)
     add_executable(lore_ffi_test tests/lore_ffi_test.cpp)
     target_link_libraries(lore_ffi_test PRIVATE lore_ffi)
-    set_target_properties(lore_ffi_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/bin>")
+    set_target_properties(
+        lore_ffi_test
+        PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/bin>"
+            SKIP_BUILD_RPATH ON
+    )
+    if(GODOT_LORE_PLUGIN_RPATH_FLAG)
+        target_link_options(lore_ffi_test PRIVATE "${GODOT_LORE_PLUGIN_RPATH_FLAG}")
+    endif()
     add_custom_command(
         TARGET lore_ffi_test POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -163,16 +183,6 @@ endif()
 get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
 
 set(GODOT_LORE_PLUGIN_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/addons/godot-lore-plugin/${GODOT_LORE_PLUGIN_PLATFORM_DIR}")
-
-# CMake's automatic rpath points at lore's build-tree location, not where
-# the POST_BUILD copy below actually puts it, and BUILD_RPATH only adds to
-# that rather than replacing it. SKIP_BUILD_RPATH below disables it so the
-# explicit -rpath flag is the only entry: "look next to me".
-if(APPLE)
-    set(GODOT_LORE_PLUGIN_RPATH_FLAG "-Wl,-rpath,@loader_path")
-elseif(UNIX)
-    set(GODOT_LORE_PLUGIN_RPATH_FLAG "-Wl,-rpath,$ORIGIN")
-endif()
 
 # gersemi: off
 set_target_properties(
