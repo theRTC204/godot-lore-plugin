@@ -48,7 +48,7 @@ These aren't bugs — they're either genuine gaps in what Lore's API offers vers
 - CMake 3.19+
 - A native C++ toolchain for your platform: MSVC (Visual Studio Build Tools) on Windows, GCC or Clang on Linux, or the Xcode Command Line Tools (Clang) on macOS
 - A Godot 4.3+ editor binary and a project to load the addon into, so the extension is tested against the exact `EditorVCSInterface` API surface it was built for (see "Testing" below)
-- Rust + Cargo — CMake builds Lore's C API from the `third_party/lore` submodule as part of the build; the first build needs network access to fetch its crate dependencies. On macOS, also install both Darwin targets (`rustup target add x86_64-apple-darwin aarch64-apple-darwin`): by default the build produces a genuine universal binary (see "Building" below), and cargo only ever builds for one target at a time.
+- Rust + Cargo — CMake builds Lore's C API (the `lore-capi` crate) from the `third_party/lore` submodule as part of the build; the first build needs network access to fetch its crate dependencies. On macOS, also install both Darwin targets (`rustup target add x86_64-apple-darwin aarch64-apple-darwin`): by default the build produces a genuine universal binary (see "Building" below), and cargo only ever builds for one target at a time.
 
 ## Building
 
@@ -63,9 +63,9 @@ These commands are the same on every platform. They produce a per-platform subfo
 
 - Windows: `addons/godot-lore-plugin/windows/godot-lore-plugin.windows.editor.x86_64.dll` + `lore.dll`
 - Linux: `addons/godot-lore-plugin/linux/godot-lore-plugin.linux.editor.x86_64.so` + `liblore.so`
-- macOS: `addons/godot-lore-plugin/macos/godot-lore-plugin.macos.editor.universal.dylib` + `liblore.dylib` — a genuine universal (x86_64 + arm64) binary by default; CMake builds the Lore crate once per architecture via `cargo` and merges the results with `lipo`
+- macOS: `addons/godot-lore-plugin/macos/godot-lore-plugin.macos.editor.universal.dylib` + `liblore.dylib` — a genuine universal (x86_64 + arm64) binary by default; CMake builds the `lore-capi` crate once per architecture via `cargo` and merges the results with `lipo`
 
-Along the way, CMake builds Lore's shared library (plus header, plus, on Windows, a `.lib` import library) from `third_party/lore` via `cargo` and stages them under `build/lore/` — there's no separate step for this.
+Along the way, CMake builds Lore's shared library (plus header, plus, on Windows, a `.lib` import library) from the `lore-capi` crate in `third_party/lore` (`cargo build -p lore-capi`) and stages them under `build/lore/` — there's no separate step for this.
 
 Building regenerates a handful of files tracked inside `third_party/lore` itself (codegen'd proto bindings, `lore-capi/lore.h`), so `git status` may show the submodule as having local modifications after a build. These are build byproducts, not something to commit — `git -C third_party/lore checkout -- .` clears them.
 

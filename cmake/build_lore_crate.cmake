@@ -1,4 +1,4 @@
-# Builds (or reuses) the third_party/lore cdylib and stages it, lore.h, and
+# Builds (or reuses) the third_party/lore lore-capi cdylib and stages it, lore.h, and
 # (on Windows) its import lib under LORE_STAGE_DIR. Run via `cmake -P` from
 # the lore_cargo_build custom target in the top-level CMakeLists.txt, which
 # passes all LORE_*/CARGO_EXECUTABLE variables below as -D arguments.
@@ -38,17 +38,17 @@ if(EXISTS "${LORE_SHA_MARKER}" AND EXISTS "${LORE_LIB_OUTPUT}" AND EXISTS "${LOR
 endif()
 
 if(LORE_UP_TO_DATE)
-    message(STATUS "lore crate artifacts already staged for ${LORE_SUBMODULE_SHA} (${LORE_CARGO_PROFILE}) — skipping cargo build")
+    message(STATUS "lore-capi crate artifacts already staged for ${LORE_SUBMODULE_SHA} (${LORE_CARGO_PROFILE}) — skipping cargo build")
     return()
 endif()
 
-message(STATUS "Building lore crate (cargo, ${LORE_CARGO_PROFILE}) from third_party/lore @ ${LORE_SUBMODULE_SHA}")
+message(STATUS "Building lore-capi crate (cargo, ${LORE_CARGO_PROFILE}) from third_party/lore @ ${LORE_SUBMODULE_SHA}")
 
 file(MAKE_DIRECTORY "${LORE_STAGE_DIR}/include" "${LORE_STAGE_DIR}/lib" "${LORE_STAGE_DIR}/bin")
 
 if(LORE_DUAL_ARCH)
     execute_process(
-        COMMAND "${CARGO_EXECUTABLE}" build --profile "${LORE_CARGO_PROFILE}" -p lore --lib
+        COMMAND "${CARGO_EXECUTABLE}" build --profile "${LORE_CARGO_PROFILE}" -p lore-capi --lib
             --target x86_64-apple-darwin --target aarch64-apple-darwin
         WORKING_DIRECTORY "${LORE_SRC_DIR}"
         RESULT_VARIABLE LORE_CARGO_RESULT
@@ -67,7 +67,7 @@ if(LORE_DUAL_ARCH)
     endif()
 else()
     execute_process(
-        COMMAND "${CARGO_EXECUTABLE}" build --profile "${LORE_CARGO_PROFILE}" -p lore --lib
+        COMMAND "${CARGO_EXECUTABLE}" build --profile "${LORE_CARGO_PROFILE}" -p lore-capi --lib
         WORKING_DIRECTORY "${LORE_SRC_DIR}"
         RESULT_VARIABLE LORE_CARGO_RESULT
     )
