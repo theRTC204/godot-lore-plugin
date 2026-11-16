@@ -1,6 +1,6 @@
 name: Validate plugin build
 
-# Full build of the GDExtension itself (godot-cpp + the lore crate + the
+# Full build of the GDExtension itself (godot-cpp + the lore-capi crate + the
 # lore_ffi wrapper + godot-lore-plugin), on all three platforms the addon
 # targets, via the reusable per-platform build workflow.
 #

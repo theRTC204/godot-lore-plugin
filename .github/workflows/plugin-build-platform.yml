@@ -1,7 +1,7 @@
 name: Build plugin (platform)
 
 # Reusable per-platform build: checkout, submodules, Rust/cargo setup, the
-# cached lore crate build, and the CMake configure/build that produces
+# cached lore-capi crate build, and the CMake configure/build that produces
 # addons/godot-lore-plugin/<platform>/. Called by plugin-build.yml (routine
 # CI validation, fast settings) and plugin-release.yml (real release
 # artifacts, real settings) with different inputs rather than duplicating
@@ -19,7 +19,7 @@ on:
         required: true
         type: string
       cargo_profile:
-        description: Cargo profile to build the lore crate with (release or release-lto)
+        description: Cargo profile to build the lore-capi crate with (release or release-lto)
         required: true
         type: string
       rust_targets:
@@ -65,13 +65,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ inputs.rust_targets }}
-
-      # build_lore_crate.cmake uses patchelf to embed a soname into
-      # liblore.so (rustc's cdylib output has none on Linux) - not
-      # preinstalled on the runner image.
-      - name: Install patchelf
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y patchelf
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2

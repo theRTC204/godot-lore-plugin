@@ -302,13 +302,13 @@ LoreResult LoreClient::history(const std::string &p_repository_path, uint32_t p_
 				RevisionHistoryEntry &entry = r_entries.back();
 				std::string key = from_lore_string(data.key);
 
-				if (key == kMetadataKeyMessage && data.value.tag == LORE_METADATA_STRING) {
+				if (key == kMetadataKeyMessage && data.value.tag == LORE_METADATA_TYPE_STRING) {
 					entry.message = from_lore_string(data.value.string);
-				} else if (key == kMetadataKeyTimestamp && data.value.tag == LORE_METADATA_NUMERIC) {
+				} else if (key == kMetadataKeyTimestamp && data.value.tag == LORE_METADATA_TYPE_NUMERIC) {
 					entry.unix_timestamp = static_cast<int64_t>(data.value.numeric / 1000);
-				} else if (key == kMetadataKeyCreatedBy && data.value.tag == LORE_METADATA_STRING) {
+				} else if (key == kMetadataKeyCreatedBy && data.value.tag == LORE_METADATA_TYPE_STRING) {
 					entry.author = from_lore_string(data.value.string);
-				} else if (key == kMetadataKeyCommittedBy && data.value.tag == LORE_METADATA_STRING && entry.author.empty()) {
+				} else if (key == kMetadataKeyCommittedBy && data.value.tag == LORE_METADATA_TYPE_STRING && entry.author.empty()) {
 					entry.author = from_lore_string(data.value.string);
 				}
 			});
